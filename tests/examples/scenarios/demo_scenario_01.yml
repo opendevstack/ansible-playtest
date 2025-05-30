@@ -1,0 +1,60 @@
+---
+name: "Demo Scenario"
+description: "Tests a playbook that pings servers, calls an API, sends emails, and uses a custom module"
+playbook: "demo_playbook.yml"
+
+# Define the mock responses for services
+service_mocks:
+  # Mock response for the custom_processor module
+  "custom_processor":
+    success: true
+    changed: true
+    message: "Project processed successfully via mock"
+    project_id: "PROJ-12345"
+
+# Verification specifications for the test
+verify:
+  # Verify that modules are called the expected number of times
+  expected_calls:
+    "ping": 1
+    "uri": 1
+    "mail": 1
+    "custom_processor": 1
+    "debug": 3
+
+  # Verify parameters passed to modules
+  parameter_validation:
+    "uri":
+      - name: "check_api_url"
+        expect_params:
+          url: "https://jsonplaceholder.typicode.com/posts/1"
+          method: "GET"
+          return_content: true
+
+    "mail":
+      - name: "check_email_params"
+        expect_params:
+          host: "localhost"
+          port: 1025
+          subject: 
+            regex: "Project Status Update: PROJ.*"
+
+    "custom_processor":
+      - name: "check_processor_params"
+        expect_params:
+          project_id: "PROJ-12345"
+          action: "notify"
+
+  # Verify the call sequence
+  call_sequence:
+    - name: "verify_basic_flow"
+      sequence:
+        - "ping"
+        - "debug"
+        - "uri"
+        - "debug"
+        - "mail"
+        - "custom_processor"
+
+  # No errors expected
+  expected_errors: []
