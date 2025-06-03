@@ -72,22 +72,60 @@ def test_run_verifiers_calls_strategies(temp_scenario_file):
     mock_strategy = mock.Mock()
     mock_strategy.verify.return_value = {'result': 'verified'}
     scenario.verification_strategies = [mock_strategy]
-    with mock.patch.object(scenario, 'playbook_statistics', return_value={'stats': 1}):
-        results = scenario.run_verifiers()
+    
+    # Create dummy playbook statistics to pass to run_verifiers
+    playbook_stats = {'stats': 1}
+    results = scenario.run_verifiers(playbook_stats)
+    
     assert results == {'result': 'verified'}
-    mock_strategy.verify.assert_called_once()
+    mock_strategy.verify.assert_called_once_with(scenario.scenario_data, playbook_stats)
 
-def test_get_summary_data_and_playbook_statistics(temp_scenario_file, tmp_path):
-    # Create a dummy playbook_statistics.json in the expected location
-    # The expected location is one directory up from ansible_test_scenario.py, i.e., src/ansible_playtest/playbook_statistics.json
-    core_dir = os.path.dirname(os.path.abspath(__file__))
-    # Go up to src/ansible_playtest
-    ansible_playtest_dir = os.path.abspath(os.path.join(core_dir, '../../../', 'src/ansible_playtest'))
-    summary_file = os.path.join(ansible_playtest_dir, 'playbook_statistics.json')
-    dummy_data = {'calls': 2}
-    with open(summary_file, 'w') as f:
-        json.dump(dummy_data, f)
-    scenario = AnsibleTestScenario(temp_scenario_file)
-    assert scenario.get_summary_data() == dummy_data
-    assert scenario.playbook_statistics() == dummy_data
-    os.remove(summary_file)
+def test_playbook_path_resolution(temp_scenario_file):
+    """Test the playbook path resolution from the scenario"""
+    scenario = AnsibleTestScenario(str(temp_scenario_file))
+    # The scenario fixture has 'dummy_playbook.yml' as the playbook
+    assert scenario.scenario_data['playbook'] == 'dummy_playbook.yml'
+
+def test_temp_files_dir(temp_scenario_file):
+    """Test that TEMP_FILES_DIR is correctly set and managed"""
+    import tempfile
+    
+    # Verify the directory pattern is correct
+    assert AnsibleTestScenario.TEMP_FILES_DIR.startswith(tempfile.gettempdir())
+    assert 'ansible_test_' in AnsibleTestScenario.TEMP_FILES_DIR
+    
+    # Verify the directory gets created when instantiating a scenario
+    scenario = AnsibleTestScenario(str(temp_scenario_file))
+    assert os.path.exists(AnsibleTestScenario.TEMP_FILES_DIR)
+
+def test_config_dir_setting():
+    """Test the static config directory setting"""
+    # Save original value to restore later
+    original_config_dir = AnsibleTestScenario.CONFIG_DIR
+    
+    try:
+        # Test with a valid directory (using /tmp which should exist on most systems)
+        test_dir = tempfile.gettempdir()
+        result = AnsibleTestScenario.set_config_dir(test_dir)
+        assert result == test_dir
+        assert AnsibleTestScenario.CONFIG_DIR == test_dir
+        
+        # Test with None/empty should raise an error if no environment variable
+        original_env = os.environ.get('ANSIBLE_PLAYTEST_CONFIG_DIR')
+        if 'ANSIBLE_PLAYTEST_CONFIG_DIR' in os.environ:
+            del os.environ['ANSIBLE_PLAYTEST_CONFIG_DIR']
+        
+        with pytest.raises(ValueError, match="Config directory cannot be empty"):
+            AnsibleTestScenario.set_config_dir(None)
+            
+        # Test with invalid directory
+        with pytest.raises(ValueError, match="Invalid config directory"):
+            AnsibleTestScenario.set_config_dir("/path/does/not/exist/hopefully")
+            
+        # Restore original env var if it existed
+        if original_env:
+            os.environ['ANSIBLE_PLAYTEST_CONFIG_DIR'] = original_env
+    
+    finally:
+        # Restore original value
+        AnsibleTestScenario.CONFIG_DIR = original_config_dir

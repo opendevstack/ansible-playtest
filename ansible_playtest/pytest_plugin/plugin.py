@@ -6,8 +6,8 @@ import os
 import sys
 import pytest
 import os
-import ansible_playtest
-from ansible_playtest.core.ansible_playbooks_test_runner import AnsiblePlaybookTestRunner
+import sys
+import ansible_playtest.ansible_callback
 from ansible_playtest.core.playbook_runner import PlaybookRunner
 from ansible_playtest.core.scenario_factory import ScenarioFactory
 from ansible_playtest.mocks_servers.mock_smtp_server import MockSMTPServer
@@ -35,7 +35,13 @@ def setup_ansible_environment(request):
     
     os.environ['ANSIBLE_CONFIG'] = ansible_cfg_path
     
-    # os.environ['ANSIBLE_CALLBACK_PLUGINS'] = ansible_playtest + '/plugins/callback'
+    # Find the absolute path to the ansible_callback directory that contains mock_module_tracker.py
+    # This will work whether the package is installed or in development mode
+   
+    # Get the directory containing the ansible_callback package
+    callback_dir = os.path.dirname(ansible_playtest.ansible_callback.__file__)
+    
+    os.environ['ANSIBLE_CALLBACK_PLUGINS'] = callback_dir
     
     os.environ['ANSIBLE_CALLBACKS_ENABLED'] = 'mock_module_tracker'
     
@@ -72,48 +78,6 @@ def smtp_mock(request):
     print(f"[PLUGIN] Stopping mock SMTP server on port {port}")
     server.stop()
 
-
-@pytest.fixture
-def ansible_playbook_test_runner(request):
-    """
-    Fixture to create and return an AnsiblePlaybookTestRunner instance
-    
-    This fixture handles setup and teardown of the test runner.
-    """
-    # Use the callspec parameters if they exist (from parametrize)
-    if hasattr(request, 'param'):
-        playbook_path = request.param.get('playbook_path')
-        scenario_path = request.param.get('scenario_path')
-    else:
-        # For direct access, get from function args
-        func_args = request.node.funcargs
-        playbook_path = func_args.get('playbook_path')
-        scenario_path = func_args.get('scenario_path')
-    
-    # Get other parameters from node attributes or CLI options    
-    inventory_path = getattr(request.node, 'inventory_path', 
-                            request.config.getoption('--ansible-playtest-inventory', None))
-    extra_vars = getattr(request.node, 'extra_vars', None)
-
-    keep_artifacts = request.config.getoption('--ansible-playtest-keep-artifacts', False)
-
-    
-    # Initialize test runner
-    runner = AnsiblePlaybookTestRunner(
-        playbook_path=playbook_path,
-        scenario_path=scenario_path,
-        inventory_path=inventory_path,
-        extra_vars=extra_vars,
-    )
-    runner.setup()
-    
-    # Give the runner to the test function
-    yield runner
-    
-    # Clean up after test
-    if not keep_artifacts:
-        runner.cleanup()
-
 @pytest.fixture
 def mock_modules(request):
     """Get mock modules from marker or return None"""
@@ -136,8 +100,9 @@ def playbook_runner(request):
                             request.config.getoption('--ansible-playtest-inventory', None))
     extra_vars = getattr(request.node, 'extra_vars', None)
     
-    keep_artifacts = request.config.getoption('--ansible-playtest-keep-artifacts', False)
-        
+    # Check for keep_artifacts marker first, then fall back to command line option
+    keep_artifacts_marker = request.node.get_closest_marker("keep_artifacts")
+    keep_artifacts = keep_artifacts_marker is not None or request.config.getoption('--ansible-playtest-keep-artifacts', False)
     
     # Create a new PlaybookRunner instance
     runner = PlaybookRunner(scenario=scenario_path)
@@ -235,5 +200,8 @@ def pytest_configure(config):
     )
     config.addinivalue_line(
         "markers", "ansible_scenario(name): identify a test as an Ansible scenario test"
+    )
+    config.addinivalue_line(
+        "markers", "keep_artifacts: keep test artifacts after test completion"
     )
 

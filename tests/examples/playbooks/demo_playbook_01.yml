@@ -8,7 +8,7 @@
 
 - name: Demo Playbook with Various Tasks
   hosts: webservers
-  gather_facts: yes
+  gather_facts: no
   vars:
     api_url: "https://jsonplaceholder.typicode.com/posts/1"
     smtp_server: "localhost"
@@ -51,10 +51,7 @@
           API Response:
           Title: {{ api_response.json.title | default('N/A') }}
           Body: {{ api_response.json.body | default('N/A') }}
-          
-          System Information:
-          Hostname: {{ ansible_hostname }}
-          Date: {{ ansible_date_time.date }}
+
       when: ping_result is success and api_response.status == 200
         
     - name: Process project with custom module
@@ -63,7 +60,6 @@
         action: "notify"
         metadata:
           source: "automated_job"
-          timestamp: "{{ ansible_date_time.iso8601 }}"
       register: process_result
       
     - name: Show processing result

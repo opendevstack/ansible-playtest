@@ -12,11 +12,10 @@ mocks:
     responses:
       - dest: "/tmp/demo02.txt"
         content: "Scenario 02 file content"
-verifiers:
-  - type: module_call
-    module: debug
-    count: 1
-  - type: parameter
-    module: copy
-    parameter: dest
-    expected: "/tmp/demo02.txt"
+verify:
+  - expected_calls:
+    debug: 1
+
+  - parameter_validation:
+     - copy:
+       dest: "tmp/demo02.txt"

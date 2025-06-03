@@ -4,7 +4,7 @@ This guide will walk you through the installation and setup of the Ansible Scena
 
 ## Prerequisites
 
-- Python 3.6 or higher
+- Python 3.10 or higher
 - pip package manager
 - Ansible 2.9 or higher
 

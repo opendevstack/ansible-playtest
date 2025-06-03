@@ -62,7 +62,7 @@ def test_run_playbook_with_scenario_scenario_not_found(runner, tmp_path):
     playbook_path = tmp_path / 'dummy_playbook.yml'
     playbook_path.write_text('- hosts: all\n  tasks: []\n')
     # Patch load_scenario to raise FileNotFoundError
-    with mock.patch('ansible_playtest.core.playbook_runner.load_scenario', side_effect=FileNotFoundError('not found')):
+    with mock.patch('ansible_playtest.core.scenario_factory.ScenarioFactory.load_scenario', side_effect=FileNotFoundError('not found')):
         success, result = runner.run_playbook_with_scenario(str(playbook_path), 'nonexistent_scenario')
     assert not success
     assert 'error' in result
@@ -79,7 +79,7 @@ def test_run_playbook_with_scenario_success_flow(runner, tmp_path):
     dummy_scenario.run_verifiers.return_value = {'ver': True}
     dummy_scenario.verification_strategies = [mock.Mock(get_status=lambda: True)]
     dummy_scenario.expects_failure.return_value = False
-    with mock.patch('ansible_playtest.core.playbook_runner.load_scenario', return_value=dummy_scenario), \
+    with mock.patch('ansible_playtest.core.scenario_factory.ScenarioFactory.load_scenario', return_value=dummy_scenario), \
          mock.patch('ansible_playtest.core.playbook_runner.ModuleMockManager') as MockManager, \
          mock.patch('ansible_playtest.core.playbook_runner.ansible_runner.run') as mock_run:
         mock_manager = MockManager.return_value

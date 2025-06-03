@@ -8,9 +8,11 @@ import os
 import sys
 import argparse
 import tempfile
+import json
 import uuid
 import ansible_runner
 import shutil
+from ansible_playtest.core.scenario_factory import ScenarioFactory
 
 # Add the parent directory to path
 parent_dir = os.path.dirname(os.path.abspath(__file__))
@@ -18,7 +20,6 @@ project_dir = os.path.dirname(parent_dir)
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-from ansible_playtest.core.ansible_test_scenario import load_scenario
 from ansible_playtest.core.ansible_mocking.module_mock_manager import ModuleMockManager
 
 
@@ -34,6 +35,9 @@ class PlaybookRunner:
         self.temp_collections_dir = None
         self.module_temp_files = []
         self.module_mock_manager = None
+        # Initialize properties to store execution results
+        self.success = False
+        self.execution_details = {}
         
     def get_mock_modules_path(self):
         """Get the path to mock modules directory"""
@@ -151,7 +155,7 @@ class PlaybookRunner:
         
         # Load the test scenario
         try:
-            scenario = load_scenario(scenario_name)
+            scenario = ScenarioFactory.load_scenario(scenario_name)
             print(f"Using scenario: {scenario.get_name()}")
             print(f"Description: {scenario.get_description()}")
         except FileNotFoundError as e:
@@ -183,14 +187,10 @@ class PlaybookRunner:
             env = os.environ.copy()
             env = self.module_mock_manager.set_env_vars(env)
             
-            # Set the ansible config to use our test-specific config
-            test_ansible_cfg = os.path.join(self.parent_dir, 'ansible-test.cfg')
-            env['ANSIBLE_CONFIG'] = test_ansible_cfg
-            print(f"Using test-specific Ansible config: {test_ansible_cfg}")
-            
+
+            # TODO: Store it a proper place
             # Ensure callback_plugins path is correctly set
-            env['ANSIBLE_TEST_FRAMEWORK_PROJECT_DIR'] = self.project_dir
-            env['ANSIBLE_CALLBACKS_ENABLED'] = 'mock_module_tracker'
+            env['ANSIBLE_TEST_TMP_DIR'] = self.temp_dir
             
             # Set the ANSIBLE_COLLECTIONS_PATH to include our mock collections
             env['ANSIBLE_COLLECTIONS_PATH'] = self.temp_collections_dir
@@ -241,7 +241,7 @@ class PlaybookRunner:
                 print("\nVerification Results:")
                 
                 # Verify expected module calls using the scenario's verification mechanism
-                verification_results = scenario.run_verifiers()
+                verification_results = scenario.run_verifiers(playbook_statistics=self.playbook_statistics())
                 
                 # Determine the overall pass/fail status of the verification
                 # Check if all verification strategies passed by looking at their get_status() results
@@ -266,21 +266,22 @@ class PlaybookRunner:
                 
                 print(f"Overall test result: {'PASS' if overall_success else 'FAIL'}")
                 
-                # Return results - we're returning overall_success as the first return value
-                # which determines the process exit code
-                return overall_success, {
+                # Update the instance properties for easy access
+                self.success = overall_success
+                self.execution_details = {
                     'success': overall_success,
                     'playbook_success': playbook_success,
                     'expected_failure': expected_failure,
                     'verification_passed': verification_passed,
                     'returncode': runner.rc,
-                    # Safely extract stdout and stderr
-                    'stdout': "",  # Simplified to avoid type checking issues
-                    'stderr': "",  # Simplified to avoid type checking issues
                     'verification': verification_results,
                     'mock_dir': self.temp_dir if keep_mocks else None,
                     'artifacts_dir': runner_artifact_dir,
                 }
+                
+                # Return results - we're returning overall_success as the first return value
+                # which determines the process exit code
+                return overall_success, self.execution_details
                 
             except Exception as e:
                 print(f"Error running playbook with ansible-runner: {str(e)}")
@@ -343,6 +344,26 @@ class PlaybookRunner:
             if verbose:
                 print(f"Error during cleanup process: {str(e)}")
             return False
+
+    def playbook_statistics(self):
+        """Get the playbook statistics from the summary data file"""
+        """Read playbook statistics from the playbook_statistics.json file"""
+        summary_data = {}
+        summary_file = 'playbook_statistics.json'
+        if self.temp_dir:
+            summary_file = os.path.join(self.temp_dir, 'playbook_statistics.json')
+        
+        try:
+            # Check if the summary file exists
+            if os.path.exists(summary_file):
+                with open(summary_file, 'r') as f:
+                    summary_data = json.load(f)
+                return summary_data
+        except (IOError, json.JSONDecodeError) as e:
+            print(f"Error reading module call statistics: {str(e)}")
+            
+        return {}
+
 
     @staticmethod
     def parse_arguments():

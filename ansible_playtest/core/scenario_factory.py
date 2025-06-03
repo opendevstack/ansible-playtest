@@ -29,12 +29,10 @@ class ScenarioFactory:
         Args:
             config_dir (Optional[str]): Root configuration directory.
             scenarios_dir (Optional[str]): Directory for scenario files.
+            playbooks_dir (Optional[str]): Directory for playbook files.
         """
-        if config_dir:
-            self.config_dir = os.path.abspath(config_dir)
-            AnsibleTestScenario.set_config_dir(self.config_dir)
-        else:
-            self.config_dir = AnsibleTestScenario.CONFIG_DIR
+        # Initialize config_dir first before using it
+        self.config_dir = os.path.abspath(config_dir) if config_dir else os.getcwd()
 
         if scenarios_dir:
             self.scenarios_dir = os.path.abspath(scenarios_dir)
@@ -46,9 +44,31 @@ class ScenarioFactory:
         else:
             self.playbooks_dir = os.path.join(self.config_dir, 'playbooks')
         
-    def load_scenario(self, scenario_name):
+    @staticmethod
+    def load_scenario(scenario_name, config_dir=None, scenarios_dir=None, playbooks_dir=None):
+        """
+        Static method to load a test scenario by name.
+        This allows ScenarioFactory.load_scenario() to be called without instantiation.
+
+        Args:
+            scenario_name (str): Name of the scenario or path to scenario file
+            config_dir (Optional[str]): Root configuration directory.
+            scenarios_dir (Optional[str]): Directory for scenario files.
+            playbooks_dir (Optional[str]): Directory for playbook files.
+
+        Returns:
+            AnsibleTestScenario: Loaded scenario object
+
+        Raises:
+            FileNotFoundError: If the scenario could not be found
+        """
+        factory = ScenarioFactory(config_dir=config_dir, scenarios_dir=scenarios_dir, playbooks_dir=playbooks_dir)
+        return factory.load_scenario_instance(scenario_name)
+        
+    def load_scenario_instance(self, scenario_name):
         """
         Load a test scenario by name (without file extension).
+        Instance method used by the static load_scenario method.
 
         Args:
             scenario_name (str): Name of the scenario or path to scenario file

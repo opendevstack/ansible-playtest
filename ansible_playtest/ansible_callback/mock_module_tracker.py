@@ -113,7 +113,7 @@ class CallbackModule(CallbackBase):
             summary_filename = "playbook_statistics.json"
         
             # Try to get the project directory from environment variable
-            project_dir = os.environ.get('ANSIBLE_TEST_FRAMEWORK_PROJECT_DIR')
+            project_dir = os.environ.get('ANSIBLE_TEST_TMP_DIR')
             if project_dir and os.path.isdir(project_dir):
                 summary_path = os.path.join(project_dir, summary_filename)
                 save_location = f"project directory ({project_dir})"

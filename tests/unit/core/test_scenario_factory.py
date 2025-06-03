@@ -36,7 +36,7 @@ def test_list_available_scenarios(temp_scenarios_dir, monkeypatch):
 
 def test_load_scenario_by_name(temp_scenarios_dir, monkeypatch):
     factory = ScenarioFactory(config_dir=str(temp_scenarios_dir))
-    scenario = factory.load_scenario("test_scenario")
+    scenario = factory.load_scenario("test_scenario", config_dir=str(temp_scenarios_dir))
     assert isinstance(scenario, AnsibleTestScenario)
     assert os.path.basename(scenario.scenario_path) == "test_scenario.yaml"
 
@@ -52,7 +52,7 @@ def test_discover_scenarios(temp_scenarios_dir):
     scenarios = factory.discover_scenarios()
     assert len(scenarios) == 1
     scenario_path, playbook_path, scenario_id = scenarios[0]
-    assert scenario_id == "test_scenario"
+    assert scenario_id == "test_playbook/test_scenario"
     assert scenario_path.endswith("test_scenario.yaml")
     assert playbook_path.endswith("test_playbook.yml")
 
