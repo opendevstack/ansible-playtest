@@ -1,0 +1,22 @@
+# Demo Scenario 02
+---
+name: Demo Scenario 02
+description: Test scenario for a playbook with multiple tasks and module mocks.
+playbook: demo_playbook_02.yml
+inventory: inventory/hosts.ini
+mocks:
+  - module: debug
+    responses:
+      - msg: "Mocked debug message for scenario 02"
+  - module: copy
+    responses:
+      - dest: "/tmp/demo02.txt"
+        content: "Scenario 02 file content"
+verifiers:
+  - type: module_call
+    module: debug
+    count: 1
+  - type: parameter
+    module: copy
+    parameter: dest
+    expected: "/tmp/demo02.txt"

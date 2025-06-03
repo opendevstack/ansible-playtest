@@ -1,7 +1,7 @@
 ---
 name: "Demo Scenario"
 description: "Tests a playbook that pings servers, calls an API, sends emails, and uses a custom module"
-playbook: "demo_playbook.yml"
+playbook: "demo_playbook_01.yml"
 
 # Define the mock responses for services
 service_mocks:

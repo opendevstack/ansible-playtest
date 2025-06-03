@@ -1,0 +1,6 @@
+ansible>=2.9.0
+ansible-runner>=2.0.0
+pyyaml>=5.1
+aiosmtpd>=1.2.0
+pytest>=8.3.0
+requests

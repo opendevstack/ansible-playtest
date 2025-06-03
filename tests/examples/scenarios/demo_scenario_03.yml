@@ -1,0 +1,20 @@
+# Demo Scenario 03
+---
+name: Demo Scenario 03
+description: Scenario to test error handling and sequence verification.
+playbook: demo_playbook_03.yml
+inventory: inventory/hosts.ini
+mocks:
+  - module: fail
+    responses:
+      - msg: "Intentional failure for scenario 03"
+  - module: debug
+    responses:
+      - msg: "Should not be reached in scenario 03"
+verifiers:
+  - type: error
+    expected_message: "Intentional failure for scenario 03"
+  - type: sequence
+    expected:
+      - fail
+      - debug

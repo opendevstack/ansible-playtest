@@ -1,0 +1,11 @@
+---
+- name: Demo Playbook for Scenario 03
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Intentional fail for scenario 03
+      fail:
+        msg: "Intentional failure for scenario 03"
+    - name: Debug after fail (should not be reached)
+      debug:
+        msg: "Should not be reached in scenario 03"

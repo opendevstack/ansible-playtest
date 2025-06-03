@@ -19,21 +19,20 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 from ansible_playtest.core.ansible_test_scenario import load_scenario
-from ansible_playtest.mocks_servers.mock_smtp_server import MockSMTPServer
 from ansible_playtest.core.ansible_mocking.module_mock_manager import ModuleMockManager
 
 
 class PlaybookRunner:
     """Class for running Ansible playbooks with scenario-based testing"""
     
-    def __init__(self):
+    def __init__(self, scenario=None):
         """Initialize the PlaybookRunner class"""
+        self.scenario = scenario
         self.parent_dir = os.path.dirname(os.path.abspath(__file__))
         self.project_dir = os.path.dirname(self.parent_dir)
         self.temp_dir = None
         self.temp_collections_dir = None
         self.module_temp_files = []
-        self.smtp_manager = None
         self.module_mock_manager = None
         
     def get_mock_modules_path(self):
@@ -105,7 +104,7 @@ class PlaybookRunner:
             print(f"Warning: Mock collections directory not found at {mock_collections_dir}")
     
     def run_playbook_with_scenario(self, playbook_path, scenario_name, inventory_path=None, extra_vars=None, 
-                                  keep_mocks=False, use_smtp_mock=True, smtp_port=1025):
+                                  keep_mocks=False):
         """
         Run an Ansible playbook with a specific test scenario
         
@@ -115,8 +114,6 @@ class PlaybookRunner:
             inventory_path: Path to inventory file (optional)
             extra_vars: Dictionary of extra variables to pass (optional)
             keep_mocks: Whether to keep the mock files after execution (default: False)
-            use_smtp_mock: Whether to start a mock SMTP server during tests (default: True)
-            smtp_port: Port to use for the mock SMTP server (default: 1025)
         
         Returns:
             tuple: (success, result_dict)
@@ -172,10 +169,6 @@ class PlaybookRunner:
         # 2. Overlay mock modules on the temporary collections
         self.overlay_mock_modules(self.temp_collections_dir)
         
-        # Start the mock SMTP server if requested
-        self.smtp_manager = None
-        if use_smtp_mock:
-            self.smtp_manager = MockSMTPServer(port=smtp_port, verbose=True).start()
         
         try:
             # Create temp files for module configs using ModuleMockManager
@@ -196,11 +189,8 @@ class PlaybookRunner:
             print(f"Using test-specific Ansible config: {test_ansible_cfg}")
             
             # Ensure callback_plugins path is correctly set
-            callback_plugins_path = os.path.abspath(os.path.join(self.project_dir, 'callback_plugins'))
             env['ANSIBLE_TEST_FRAMEWORK_PROJECT_DIR'] = self.project_dir
-            env['ANSIBLE_CALLBACK_PLUGINS'] = callback_plugins_path
             env['ANSIBLE_CALLBACKS_ENABLED'] = 'mock_module_tracker'
-            print(f"Using callback plugins from: {callback_plugins_path}")
             
             # Set the ANSIBLE_COLLECTIONS_PATH to include our mock collections
             env['ANSIBLE_COLLECTIONS_PATH'] = self.temp_collections_dir
@@ -212,27 +202,12 @@ class PlaybookRunner:
             else:
                 env['PYTHONPATH'] = self.parent_dir
             
-            # If mock SMTP server is running, set environment variables for it
-            if self.smtp_manager and self.smtp_manager.is_running():
-                env['MOCK_SMTP_SERVER_HOST'] = 'localhost'
-                env['MOCK_SMTP_SERVER_PORT'] = str(smtp_port)
-                env['ANSIBLE_MOCK_SMTP_ENABLED'] = 'true'
-            
             # Prepare the Ansible Runner configuration
             verbosity = 1  # Similar to '-v' flag in command line
             
             # Process and finalize extra_vars
             processed_extra_vars = extra_vars or {}
-            
-            # Add SMTP server configuration to extra_vars if needed
-            if self.smtp_manager and self.smtp_manager.is_running():
-                smtp_vars = {
-                    'smtp_server': 'localhost',
-                    'smtp_port': smtp_port
-                }
-                
-                processed_extra_vars.update(smtp_vars)
-            
+                       
             # Prepare the inventory - ansible-runner accepts either a file path or an inventory dict
             inventory = inventory_path
             
@@ -311,15 +286,10 @@ class PlaybookRunner:
                 print(f"Error running playbook with ansible-runner: {str(e)}")
                 return False, {"error": str(e)}
             
-        finally:
-            # Stop the SMTP server if it was started
-            if self.smtp_manager:
-                self.smtp_manager.stop()
-            
+        finally:          
             # Clean up the temporary files only if not keeping mocks
             if not keep_mocks:
-                if self.module_mock_manager:
-                    self.module_mock_manager.cleanup()
+                self.cleanup(verbose=True)
             else:
                 print(f"\n*** KEEPING MOCK FILES FOR DEBUGGING ***")
                 print(f"Mock directory: {self.temp_dir}")
@@ -328,6 +298,51 @@ class PlaybookRunner:
                 for file_path in self.module_temp_files:
                     if os.path.exists(file_path):
                         print(f"  - {file_path}")
+
+    def cleanup(self, verbose: bool = True) -> bool:
+        """
+        Clean up all artifacts generated during the test run
+        
+        Args:
+            verbose: If True, print information about the cleanup process
+            
+        Returns:
+            bool: True if cleanup was successful, False otherwise
+        """
+        success = True
+        
+        try:
+            # Clean up the mock module manager resources
+            if self.module_mock_manager:
+                if verbose:
+                    print("Cleaning up module mock resources...")
+                self.module_mock_manager.cleanup()
+                
+            # Remove the temporary directory and all its contents if it exists
+            if self.temp_dir and os.path.exists(self.temp_dir):
+                if verbose:
+                    print(f"Removing temporary directory: {self.temp_dir}")
+                try:
+                    shutil.rmtree(self.temp_dir)
+                    if verbose:
+                        print("Temporary directory removed successfully.")
+                except Exception as e:
+                    if verbose:
+                        print(f"Error removing temporary directory: {str(e)}")
+                    success = False
+                    
+            # Reset instance variables
+            self.temp_dir = None
+            self.temp_collections_dir = None
+            self.module_temp_files = []
+            self.module_mock_manager = None
+            
+            return success
+            
+        except Exception as e:
+            if verbose:
+                print(f"Error during cleanup process: {str(e)}")
+            return False
 
     @staticmethod
     def parse_arguments():
@@ -338,11 +353,6 @@ class PlaybookRunner:
         parser.add_argument('--inventory', '-i', help='Path to inventory file')
         parser.add_argument('--extra-var', '-e', action='append', help='Extra variables (key=value format)')
         parser.add_argument('--keep-mocks', '-k', action='store_true', help='Keep mock files after execution for debugging')
-        
-        # SMTP server options
-        smtp_group = parser.add_argument_group('SMTP Server Options')
-        smtp_group.add_argument('--no-smtp', action='store_true', help='Disable mock SMTP server')
-        smtp_group.add_argument('--smtp-port', type=int, default=1025, help='Port for the mock SMTP server (default: 1025)')
         
         return parser.parse_args()
 
@@ -362,19 +372,30 @@ def main():
     # Create runner instance
     runner = PlaybookRunner()
     
-    # Run the playbook with the specified scenario
-    success, result = runner.run_playbook_with_scenario(
-        args.playbook,
-        args.scenario,
-        inventory_path=args.inventory,
-        extra_vars=extra_vars,
-        keep_mocks=args.keep_mocks,
-        use_smtp_mock=not args.no_smtp,
-        smtp_port=args.smtp_port
-    )
-    
-    # Exit with appropriate return code
-    sys.exit(0 if success else 1)
+    try:
+        # Run the playbook with the specified scenario
+        success, result = runner.run_playbook_with_scenario(
+            args.playbook,
+            args.scenario,
+            inventory_path=args.inventory,
+            extra_vars=extra_vars,
+            keep_mocks=args.keep_mocks
+        )
+        
+        # Exit with appropriate return code
+        sys.exit(0 if success else 1)
+    except KeyboardInterrupt:
+        print("\nTest execution interrupted by user.")
+        if not args.keep_mocks:
+            print("Cleaning up resources...")
+            runner.cleanup(verbose=True)
+        sys.exit(130)  # Standard exit code for SIGINT
+    except Exception as e:
+        print(f"Error in test execution: {str(e)}")
+        if not args.keep_mocks:
+            print("Cleaning up resources...")
+            runner.cleanup(verbose=True)
+        sys.exit(1)
 
 
 if __name__ == '__main__':

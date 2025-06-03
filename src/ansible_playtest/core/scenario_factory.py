@@ -2,106 +2,101 @@
 Factory for loading Ansible test scenarios
 """
 import os
-import glob
+import yaml
+import logging
+from typing import Optional, List, Tuple
 from ansible_playtest.core.ansible_test_scenario import AnsibleTestScenario
 
 class ScenarioFactory:
     """
     Factory class for loading test scenarios based on different criteria.
     Provides methods to find, list, and load scenarios from the filesystem.
+
+    Args:
+        config_dir (Optional[str]): Root configuration directory. If provided,
+            playbooks and scenarios will be located as subdirectories.
+        scenarios_dir (Optional[str]): Directory where scenarios are located.
+            If provided, overrides the default scenarios directory.
     """
-    
-    def __init__(self, config_dir=None):
+
+    def __init__(self, 
+                 config_dir: Optional[str] = None, 
+                 scenarios_dir: Optional[str] = None,
+                 playbooks_dir: Optional[str] = None):
         """
-        Initialize the scenario factory with a configuration directory.
-        
+        Initialize the scenario factory with configuration and/or scenarios directory.
+
         Args:
-            config_dir (str, optional): Custom configuration directory.
-                If None, uses the default from AnsibleTestScenario.CONFIG_DIR.
+            config_dir (Optional[str]): Root configuration directory.
+            scenarios_dir (Optional[str]): Directory for scenario files.
         """
-        # Use provided config_dir or get from AnsibleTestScenario
         if config_dir:
-            self.config_dir = AnsibleTestScenario.set_config_dir(config_dir)
+            self.config_dir = os.path.abspath(config_dir)
+            AnsibleTestScenario.set_config_dir(self.config_dir)
         else:
             self.config_dir = AnsibleTestScenario.CONFIG_DIR
-            
-        # Define the scenarios directory
-        self.scenarios_dir = os.path.join(self.config_dir, 'scenarios')
+
+        if scenarios_dir:
+            self.scenarios_dir = os.path.abspath(scenarios_dir)
+        else:
+            self.scenarios_dir = os.path.join(self.config_dir, 'scenarios')
+
+        if playbooks_dir:
+            self.playbooks_dir = os.path.abspath(playbooks_dir)
+        else:
+            self.playbooks_dir = os.path.join(self.config_dir, 'playbooks')
         
     def load_scenario(self, scenario_name):
         """
         Load a test scenario by name (without file extension).
-        
-        The function searches for scenarios in the following order:
-        1. If scenario_name is an absolute path, use it directly
-        2. If scenario_name is a relative path from the current directory, use that
-        3. Look in the configured scenarios directory and its subdirectories
-        
+
         Args:
             scenario_name (str): Name of the scenario or path to scenario file
-            
+
         Returns:
             AnsibleTestScenario: Loaded scenario object
-            
+
         Raises:
             FileNotFoundError: If the scenario could not be found
         """
         # First check if the scenario_name is a valid file path
         if os.path.isfile(scenario_name):
-            print(f"Found scenario at {scenario_name}")
             return AnsibleTestScenario(scenario_name)
         
         # Next check if scenario_name is a relative file path from current directory
         current_dir_scenario = os.path.join(os.getcwd(), scenario_name)
         if os.path.isfile(current_dir_scenario):
-            print(f"Found scenario at {current_dir_scenario}")
             return AnsibleTestScenario(current_dir_scenario)
             
-        # Then check if scenario_name contains a path separator
-        if '/' in scenario_name:
-            # If it has a path separator, treat as a relative path inside the scenarios directory
-            scenario_path = os.path.join(self.scenarios_dir, f"{scenario_name}.yaml")
-            if os.path.exists(scenario_path):
-                print(f"Found scenario at {scenario_path}")
+        # Relative to scenarios_dir
+        for ext in ('.yaml', '.yml'):
+            scenario_path = os.path.join(self.scenarios_dir, f"{scenario_name}{ext}")
+            if os.path.isfile(scenario_path):
                 return AnsibleTestScenario(scenario_path)
-            
-            # Try with .yml extension too
-            yml_path = os.path.join(self.scenarios_dir, f"{scenario_name}.yml")
-            if os.path.exists(yml_path):
-                print(f"Found scenario at {yml_path}")
-                return AnsibleTestScenario(yml_path)
-        else:
-            # Check if the scenario exists in the root scenarios directory
-            scenario_path = os.path.join(self.scenarios_dir, f"{scenario_name}.yaml")
-            if os.path.exists(scenario_path):
-                print(f"Found scenario at {scenario_path}")
-                return AnsibleTestScenario(scenario_path)
-        
-        # Look in subfolders for scenario files
+
+        # Search recursively in scenarios_dir
         for root, _, files in os.walk(self.scenarios_dir):
             for file in files:
-                file_path = os.path.join(root, file)
-                base_name = os.path.splitext(file)[0]
-                
-                # Handle both the direct filename match and the case with path separator
-                if (base_name == scenario_name or
-                    file_path.endswith(f"{scenario_name}.yaml") or
-                    file_path.endswith(f"{scenario_name}.yml")):
-                    print(f"Found scenario at {file_path}")
-                    return AnsibleTestScenario(file_path)
-        
-        # If we reach here, the scenario was not found
-        raise FileNotFoundError(f"Scenario not found in {self.scenarios_dir}."
-                               f"\nAvailable scenarios:{self.list_available_scenarios()}")
+                if file.endswith(('.yaml', '.yml')):
+                    base_name = os.path.splitext(file)[0]
+                    file_path = os.path.join(root, file)
+                    rel_path = os.path.relpath(file_path, self.scenarios_dir)
+                    rel_base = os.path.splitext(rel_path)[0]
+                    if base_name == scenario_name or rel_base == scenario_name:
+                        return AnsibleTestScenario(file_path)
+
+        raise FileNotFoundError(
+            f"Scenario '{scenario_name}' not found in {self.scenarios_dir}.\n"
+            f"Available scenarios: {self.list_available_scenarios()}"
+        )
     
-    def list_available_scenarios(self):
+    def list_available_scenarios(self) -> List[str]:
         """
         Get a list of all available scenario names.
-        
+
         Returns:
-            list: List of scenario names without file extensions
+            List[str]: List of scenario names without file extensions
         """
-        # Collect all scenario paths
         available_scenarios = []
         for root, _, files in os.walk(self.scenarios_dir):
             for file in files:
@@ -109,46 +104,64 @@ class ScenarioFactory:
                     rel_path = os.path.relpath(os.path.join(root, file), self.scenarios_dir)
                     scenario_id = os.path.splitext(rel_path)[0]
                     available_scenarios.append(scenario_id)
-        
         return available_scenarios
     
-    def bulk_load_scenarios(self, pattern=None):
+    def discover_scenarios(self) -> List[Tuple[str, str, str]]:
         """
-        Load multiple scenarios matching a pattern.
-        
-        Args:
-            pattern (str, optional): Glob pattern to match scenario names.
-                If None, loads all available scenarios.
-                
+        Discover all scenario files and extract their playbook information.
+
         Returns:
-            dict: Dictionary mapping scenario names to loaded scenario objects
+            List[Tuple[str, str, str]]: (scenario_path, playbook_path, scenario_id)
         """
-        scenarios = {}
-        
-        if pattern:
-            # Handle specific pattern matching
-            matching_files = []
-            for ext in ['.yaml', '.yml']:
-                pattern_with_ext = f"{pattern}{ext}"
-                # Check in root scenarios dir
-                matching_files.extend(glob.glob(os.path.join(self.scenarios_dir, pattern_with_ext)))
-                # Check in subdirectories
-                matching_files.extend(glob.glob(os.path.join(self.scenarios_dir, '**', pattern_with_ext), recursive=True))
-                
-            for file_path in matching_files:
-                try:
-                    scenario = AnsibleTestScenario(file_path)
-                    rel_path = os.path.relpath(file_path, self.scenarios_dir)
-                    scenario_id = os.path.splitext(rel_path)[0]
-                    scenarios[scenario_id] = scenario
-                except Exception as e:
-                    print(f"Error loading scenario {file_path}: {str(e)}")
-        else:
-            # Load all scenarios
-            for scenario_name in self.list_available_scenarios():
-                try:
-                    scenarios[scenario_name] = self.load_scenario(scenario_name)
-                except Exception as e:
-                    print(f"Error loading scenario {scenario_name}: {str(e)}")
-        
+        logger = logging.getLogger(__name__)
+        scenarios: List[Tuple[str, str, str]] = []
+
+        if not os.path.exists(self.scenarios_dir):
+            logger.error(f"Scenario directory not found: {self.scenarios_dir}")
+            return scenarios
+
+        for root, _, files in os.walk(self.scenarios_dir):
+            for file in files:
+                if file.endswith(('.yaml', '.yml')):
+                    scenario_path = os.path.join(root, file)
+                    try:
+                        with open(scenario_path, 'r', encoding='utf-8') as f:
+                            scenario_data = yaml.safe_load(f)
+                        if not scenario_data or 'playbook' not in scenario_data:
+                            logger.warning(
+                                f"Scenario {scenario_path} is missing 'playbook' field"
+                            )
+                            continue
+                        playbook_name = scenario_data['playbook']
+
+                        # Validate playbook existence using playbooks_dir if not absolute
+                        if os.path.isabs(playbook_name):
+                            playbook_path = playbook_name
+                        else:
+                            playbook_path = os.path.join(self.playbooks_dir, playbook_name)
+
+                        if not os.path.exists(playbook_path):
+                            logger.warning(
+                                f"Playbook {playbook_path} not found for scenario {scenario_path}"
+                            )
+                            continue
+
+                        rel_path = os.path.relpath(scenario_path, self.scenarios_dir)
+                        # scenario_id: playbook + folder + scenario file name
+                        scenario_folder = os.path.dirname(rel_path)
+                        scenario_file = os.path.splitext(os.path.basename(rel_path))[0]
+                        playbook_base = os.path.splitext(os.path.basename(playbook_name))[0]
+                        if scenario_folder:
+                            scenario_id = f"{playbook_base}/{scenario_folder}/{scenario_file}"
+                        else:
+                            scenario_id = f"{playbook_base}/{scenario_file}"
+                        logger.info(
+                            f"Found scenario: {scenario_id} using playbook: {playbook_path}"
+                        )
+                        scenarios.append((scenario_path, playbook_path, scenario_id))
+                    except Exception as e:
+                        logger.error(
+                            f"Error processing scenario {scenario_path}: {str(e)}"
+                        )
         return scenarios
+
