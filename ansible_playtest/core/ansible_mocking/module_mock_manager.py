@@ -1,8 +1,18 @@
+"""
+ModuleMockManager class for managing mock configurations and environment variables for Ansible module mocking.
+
+This module provides functionality to create, manage, and clean up mock configurations
+for Ansible modules during testing. It allows specifying mock responses for modules
+and setting environment variables to enable the mocks during Ansible playbook execution.
+"""
+
 import os
 import json
 
+
 class ModuleMockManager:
     """Handles creation of mock config files and environment variables for Ansible module mocking."""
+
     def __init__(self, temp_dir):
         self.temp_dir = temp_dir
         self.module_temp_files = []
@@ -20,7 +30,7 @@ class ModuleMockManager:
         for module_name in module_names:
             mock_data = scenario.get_mock_response(module_name)
             file_path = os.path.join(self.temp_dir, f"{module_name}_mock_config.json")
-            with open(file_path, 'w') as f:
+            with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(mock_data, f)
             self.module_temp_files.append(file_path)
             self.module_configs[module_name] = file_path
@@ -35,9 +45,9 @@ class ModuleMockManager:
             dict: The updated environment dict.
         """
         for module_name, config_path in self.module_configs.items():
-            env_module_name = module_name.replace('.', '_').upper()
-            env[f'ANSIBLE_MOCK_{env_module_name}_CONFIG'] = config_path
-            env[f'ANSIBLE_MOCK_{env_module_name}_ENABLED'] = 'true'
+            env_module_name = module_name.replace(".", "_").upper()
+            env[f"ANSIBLE_MOCK_{env_module_name}_CONFIG"] = config_path
+            env[f"ANSIBLE_MOCK_{env_module_name}_ENABLED"] = "true"
         return env
 
     def cleanup(self):

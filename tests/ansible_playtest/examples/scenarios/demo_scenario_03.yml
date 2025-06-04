@@ -11,8 +11,9 @@ mocks:
 
 verify:
   expected_errors:
-    - message: "Intentional failure for scenario 03"
+    - task: "Intentional fail for scenario 03"
       expect_process_failure: true
+      message: "Intentional failure for scenario 03"
 
   call_sequence:
     - fail

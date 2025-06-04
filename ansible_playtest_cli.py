@@ -9,6 +9,9 @@ import os
 import sys
 import argparse
 
+from ansible_playtest.core.playbook_runner import (
+    PlaybookRunner
+)
 
 # Add the src directory to path to make imports work
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -16,9 +19,7 @@ src_dir = os.path.join(script_dir, 'src')
 if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
 
-from ansible_playtest.core.playbook_runner import (
-    PlaybookRunner
-)
+
 
 def main():
     """Main function for the ansible-playtest CLI"""
@@ -28,7 +29,7 @@ def main():
     parser.add_argument('--inventory', '-i', help='Path to inventory file')
     parser.add_argument('--extra-var', '-e', action='append', help='Extra variables (key=value format)')
     parser.add_argument('--keep-mocks', '-k', action='store_true', help='Keep mock files after execution for debugging')
-    
+
     # SMTP server options
     smtp_group = parser.add_argument_group('SMTP Server Options')
     smtp_group.add_argument('--no-smtp', action='store_true', help='Disable mock SMTP server')
@@ -46,14 +47,12 @@ def main():
     
     # Run the playbook with the specified scenario using the class
     runner = PlaybookRunner()
-    success, result = runner.run_playbook_with_scenario(
+    success, _ = runner.run_playbook_with_scenario(
         args.playbook,
         args.scenario,
         inventory_path=args.inventory,
         extra_vars=extra_vars,
         keep_mocks=args.keep_mocks,
-        use_smtp_mock=not args.no_smtp,
-        smtp_port=args.smtp_port
     )
     
     # Exit with appropriate return code

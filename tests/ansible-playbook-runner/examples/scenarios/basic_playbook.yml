@@ -1,0 +1,15 @@
+- hosts: localhost
+  tasks:
+    - name: Ensure a directory exists
+      file:
+        path: /tmp/example_directory
+        state: directory
+
+    - name: Create a file
+      copy:
+        dest: /tmp/example_directory/example_file.txt
+        content: "This is a basic Ansible playbook example."
+
+    - name: Print a message
+      debug:
+        msg: "Basic playbook executed successfully."

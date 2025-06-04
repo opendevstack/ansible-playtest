@@ -1,6 +1,7 @@
 """
 Pytest fixtures and configuration for AnsiblePlayTest
 """
+
 from __future__ import annotations
 import os
 import sys
@@ -12,9 +13,10 @@ from ansible_playtest.core.playbook_runner import PlaybookRunner
 from ansible_playtest.core.scenario_factory import ScenarioFactory
 from ansible_playtest.mocks_servers.mock_smtp_server import MockSMTPServer
 
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
+
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_ansible_environment(request):
@@ -24,59 +26,63 @@ def setup_ansible_environment(request):
     """
     # Store original environment
     original_env = os.environ.copy()
-    
+
     # Set up the environment for all tests
     # Check if a custom ansible.cfg is provided via CLI option
     custom_ansible_cfg = request.config.getoption("--ansible-playtest-ansible-cfg")
     if custom_ansible_cfg:
         ansible_cfg_path = custom_ansible_cfg
     else:
-        ansible_cfg_path = os.path.join(os.path.dirname(__file__), 'ansible.cfg')
-    
-    os.environ['ANSIBLE_CONFIG'] = ansible_cfg_path
-    
+        ansible_cfg_path = os.path.join(os.path.dirname(__file__), "ansible.cfg")
+
+    os.environ["ANSIBLE_CONFIG"] = ansible_cfg_path
+
     # Find the absolute path to the ansible_callback directory that contains mock_module_tracker.py
     # This will work whether the package is installed or in development mode
-   
+
     # Get the directory containing the ansible_callback package
     callback_dir = os.path.dirname(ansible_playtest.ansible_callback.__file__)
-    
-    os.environ['ANSIBLE_CALLBACK_PLUGINS'] = callback_dir
-    
-    os.environ['ANSIBLE_CALLBACKS_ENABLED'] = 'mock_module_tracker'
-    
+
+    os.environ["ANSIBLE_CALLBACK_PLUGINS"] = callback_dir
+
+    os.environ["ANSIBLE_CALLBACKS_ENABLED"] = "mock_module_tracker"
+
     # Set up custom mocked collections path if specified
-    mocked_collections = request.config.getoption("--ansible-playtest-mocked-collections")
+    mocked_collections = request.config.getoption(
+        "--ansible-playtest-mocked-collections"
+    )
     if mocked_collections:
-        os.environ['ANSIBLE_COLLECTIONS_PATH'] = mocked_collections
-    
+        os.environ["ANSIBLE_COLLECTIONS_PATH"] = mocked_collections
+
     # Let the test run
     yield
-    
+
     # Restore the original environment when done
     os.environ.clear()
     os.environ.update(original_env)
+
 
 @pytest.fixture
 def smtp_mock(request):
     """Get SMTP mock configuration from marker and start SMTP mock server"""
     marker = request.node.get_closest_marker("smtp_mock")
     port = 1025  # Default SMTP port
-    
+
     if marker and marker.kwargs.get("port"):
         port = marker.kwargs["port"]
     print(f"[PLUGIN] Starting mock SMTP server on port {port}")
-    
+
     # Create and start the mock SMTP server
-    server = MockSMTPServer(port=port,verbose=0)
+    server = MockSMTPServer(port=port, verbose=0)
     server.start()
-    
+
     # Yield the server instance so tests can use it
     yield server
-    
+
     # Stop the server when the test is complete
     print(f"[PLUGIN] Stopping mock SMTP server on port {port}")
     server.stop()
+
 
 @pytest.fixture
 def mock_modules(request):
@@ -84,46 +90,97 @@ def mock_modules(request):
     marker = request.node.get_closest_marker("mock_modules")
     return marker.args[0] if marker else None
 
+
 @pytest.fixture
 def playbook_runner(request):
-    if hasattr(request, 'param'):
-        playbook_path = request.param.get('playbook_path')
-        scenario_path = request.param.get('scenario_path')
+    if hasattr(request, "param"):
+        playbook_path = request.param.get("playbook_path")
+        scenario_path = request.param.get("scenario_path")
     else:
         # For direct access, get from function args
         func_args = request.node.funcargs
-        playbook_path = func_args.get('playbook_path')
-        scenario_path = func_args.get('scenario_path')
-    
-    # Get other parameters from node attributes or CLI options    
-    inventory_path = getattr(request.node, 'inventory_path', 
-                            request.config.getoption('--ansible-playtest-inventory', None))
-    extra_vars = getattr(request.node, 'extra_vars', None)
-    
+        playbook_path = func_args.get("playbook_path")
+        scenario_path = func_args.get("scenario_path")
+
+    # Get other parameters from node attributes or CLI options
+    inventory_path = getattr(
+        request.node,
+        "inventory_path",
+        request.config.getoption("--ansible-playtest-inventory", None),
+    )
+    extra_vars = getattr(request.node, "extra_vars", None)
+
     # Check for keep_artifacts marker first, then fall back to command line option
     keep_artifacts_marker = request.node.get_closest_marker("keep_artifacts")
-    keep_artifacts = keep_artifacts_marker is not None or request.config.getoption('--ansible-playtest-keep-artifacts', False)
-    
+    keep_artifacts = keep_artifacts_marker is not None or request.config.getoption(
+        "--ansible-playtest-keep-artifacts", False
+    )
+
+    # Check for virtualenv markers and options
+    use_virtualenv = request.config.getoption(
+        "--ansible-playtest-use-virtualenv", False
+    )
+    virtualenv_marker = request.node.get_closest_marker("use_virtualenv")
+    if virtualenv_marker is not None:
+        use_virtualenv = True
+
+    # Get requirements options
+    requirements = None
+    if use_virtualenv:
+        requirements_file = request.config.getoption(
+            "--ansible-playtest-requirements", None
+        )
+        requirements_packages = request.config.getoption(
+            "--ansible-playtest-requirements-packages", []
+        )
+
+        if requirements_file and requirements_packages:
+            print("Warning: Both requirements file and packages specified. Using file.")
+            requirements = requirements_file
+        elif requirements_file:
+            requirements = requirements_file
+        elif requirements_packages:
+            requirements = requirements_packages
+
+        # Check for marker-specific requirements
+        if virtualenv_marker and virtualenv_marker.kwargs.get("requirements"):
+            requirements = virtualenv_marker.kwargs.get("requirements")
+
     # Create a new PlaybookRunner instance
-    runner = PlaybookRunner(scenario=scenario_path)
+    runner = PlaybookRunner(
+        scenario=scenario_path, use_virtualenv=use_virtualenv, requirements=requirements
+    )
+
+    # Set up virtualenv if needed before running the playbook
+    if use_virtualenv:
+        print("\nSetting up virtual environment for playbook execution...")
+        if not runner.setup_virtualenv():
+            pytest.fail("Failed to set up virtual environment for playbook execution")
+        print("Virtual environment ready.")
+
     runner.run_playbook_with_scenario(
         playbook_path=playbook_path,
         scenario_name=scenario_path,
         inventory_path=inventory_path,
         extra_vars=extra_vars,
-        keep_mocks=keep_artifacts)
-    
+        keep_mocks=keep_artifacts,
+    )
+
     # Yield the runner to the test function
     yield runner
-    
+
     if not keep_artifacts:
-        runner.cleanup()    
+        runner.cleanup()
+
 
 def pytest_generate_tests(metafunc):
     """
     Auto-discover and generate tests for all scenarios and playbooks.
     """
-    if "scenario_path" in metafunc.fixturenames and "playbook_path" in metafunc.fixturenames:
+    if (
+        "scenario_path" in metafunc.fixturenames
+        and "playbook_path" in metafunc.fixturenames
+    ):
         # Get scenarios and playbooks directory from command line options or use defaults
         scenarios_dir = metafunc.config.getoption("--ansible-playtest-scenarios-dir")
         playbooks_dir = metafunc.config.getoption("--ansible-playtest-playbook-dir")
@@ -132,7 +189,8 @@ def pytest_generate_tests(metafunc):
         factory = ScenarioFactory(
             config_dir=os.path.dirname(scenarios_dir),
             scenarios_dir=scenarios_dir,
-            playbooks_dir=playbooks_dir)
+            playbooks_dir=playbooks_dir,
+        )
         discovered = factory.discover_scenarios()
 
         test_params = []
@@ -143,65 +201,95 @@ def pytest_generate_tests(metafunc):
 
         metafunc.parametrize("playbook_path,scenario_path", test_params, ids=test_ids)
 
+
 def pytest_addoption(parser: pytest.Parser) -> None:
     """Add Ansible scenario test options to pytest"""
     group = parser.getgroup("ansible-playtest", "Ansible Playbook Testing")
-    
+
     group.addoption(
-        "--ansible-playtest-keep-artifacts", 
-        action="store_true", 
+        "--ansible-playtest-keep-artifacts",
+        action="store_true",
         default=False,
-        help="Keep test artifacts after test completion"
+        help="Keep test artifacts after test completion",
     )
     group.addoption(
-        "--ansible-playtest-scenarios-dir", 
-        action="store", 
-        default=os.environ.get("ANSIBLE_PLAYTEST_SCENARIOS_DIR", "tests/test_data/scenarios"),
-        help="Directory containing scenario files to test"
+        "--ansible-playtest-scenarios-dir",
+        action="store",
+        default=os.environ.get(
+            "ANSIBLE_PLAYTEST_SCENARIOS_DIR", "tests/test_data/scenarios"
+        ),
+        help="Directory containing scenario files to test",
     )
     group.addoption(
-        "--ansible-playtest-playbook-dir", 
-        action="store", 
+        "--ansible-playtest-playbook-dir",
+        action="store",
         default=os.environ.get("ANSIBLE_PLAYTEST_PLAYBOOKS_DIR", "playbooks"),
-        help="Directory containing playbooks to test"
+        help="Directory containing playbooks to test",
     )
     group.addoption(
         "--ansible-playtest-ansible-cfg",
         action="store",
         default=os.environ.get("ANSIBLE_PLAYTEST_ANSIBLE_CFG", None),
-        help="Path to ansible.cfg file to use for tests"
+        help="Path to ansible.cfg file to use for tests",
     )
     group.addoption(
         "--ansible-playtest-inventory",
         action="store",
         default=os.environ.get("ANSIBLE_PLAYTEST_INVENTORY", None),
-        help="Path to inventory file or directory to use for tests"
+        help="Path to inventory file or directory to use for tests",
     )
     group.addoption(
         "--ansible-playtest-mocked-collections",
         action="store",
         default=os.environ.get("ANSIBLE_PLAYTEST_MOCKED_COLLECTIONS", None),
-        help="Path to directory with mocked Ansible collections"
+        help="Path to directory with mocked Ansible collections",
     )
     group.addoption(
         "--skip-auto-discovery",
         action="store_true",
         default=False,
         help="Skip auto-discovery of scenario files",
-    )    
+    )
+
+    # Add virtualenv-related options
+    group.addoption(
+        "--ansible-playtest-use-virtualenv",
+        action="store_true",
+        default=os.environ.get("ANSIBLE_PLAYTEST_USE_VIRTUALENV", "false").lower()
+        == "true",
+        help="Run playbooks in a fresh virtual environment",
+    )
+    group.addoption(
+        "--ansible-playtest-requirements",
+        action="store",
+        default=os.environ.get("ANSIBLE_PLAYTEST_REQUIREMENTS", None),
+        help="Path to requirements file for the virtual environment",
+    )
+    group.addoption(
+        "--ansible-playtest-requirements-packages",
+        action="append",
+        default=(
+            os.environ.get("ANSIBLE_PLAYTEST_REQUIREMENTS_PACKAGES", "").split(",")
+            if os.environ.get("ANSIBLE_PLAYTEST_REQUIREMENTS_PACKAGES", "")
+            else []
+        ),
+        help="Additional packages to install in the virtual environment (comma-separated)",
+    )
+
 
 def pytest_configure(config):
     """Configure pytest markers"""
     config.addinivalue_line(
         "markers", "mock_modules(modules): mock the specified list of Ansible modules"
     )
-    config.addinivalue_line(
-        "markers", "smtp_mock(port=1025): enable SMTP mock server"
-    )
+    config.addinivalue_line("markers", "smtp_mock(port=1025): enable SMTP mock server")
     config.addinivalue_line(
         "markers", "ansible_scenario(name): identify a test as an Ansible scenario test"
     )
     config.addinivalue_line(
         "markers", "keep_artifacts: keep test artifacts after test completion"
     )
-
+    config.addinivalue_line(
+        "markers",
+        "use_virtualenv(requirements=None): run the playbook in a virtual environment",
+    )

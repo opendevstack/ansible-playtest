@@ -33,7 +33,7 @@ ansible-playtest = "ansible_playtest.cli:main"
 include-package-data = false
 
 [tool.setuptools.packages.find]
-include = ["ansible_playtest*"]
+include = ["ansible_playtest*", "ansible_playbook_runner"]
 
 [tool.setuptools.package-data]
 ansible_playtest = ["plugins/**/*"]

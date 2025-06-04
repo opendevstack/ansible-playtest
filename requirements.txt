@@ -4,3 +4,4 @@ pyyaml>=5.1
 aiosmtpd>=1.2.0
 pytest>=8.3.0
 requests
+click
