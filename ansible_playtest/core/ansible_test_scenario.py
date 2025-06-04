@@ -21,29 +21,7 @@ class AnsibleTestScenario:
     _temp_dir_uuid = uuid.uuid4().hex
     TEMP_FILES_DIR = os.path.join(tempfile.gettempdir(), f"ansible_test_{_temp_dir_uuid}")
     
-    @classmethod
-    def set_config_dir(cls, config_dir):
-        """
-        Set the configuration directory for scenarios.
-        
-        Args:
-            config_dir (str): The path to the configuration directory
-        
-        Returns:
-            str: The updated configuration directory path
-        """
-        # If config_dir is not provided, try to use the environment variable
-        if not config_dir:
-            config_dir = os.environ.get('ANSIBLE_PLAYTEST_CONFIG_DIR', None)
-        if not config_dir:
-            raise ValueError("Config directory cannot be empty.")
-        if not os.path.isdir(config_dir):
-            raise ValueError(f"Invalid config directory: {config_dir}. It is not a valid directory.")
-        
-        cls.CONFIG_DIR = os.path.abspath(config_dir)
-        print(f"Set scenario configuration directory to: {cls.CONFIG_DIR}")
-        return cls.CONFIG_DIR
-    
+   
     def __init__(self, scenario_path):
         """Initialize with a scenario YAML file"""
         self.scenario_path = scenario_path

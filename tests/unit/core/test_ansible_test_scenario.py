@@ -97,35 +97,3 @@ def test_temp_files_dir(temp_scenario_file):
     # Verify the directory gets created when instantiating a scenario
     scenario = AnsibleTestScenario(str(temp_scenario_file))
     assert os.path.exists(AnsibleTestScenario.TEMP_FILES_DIR)
-
-def test_config_dir_setting():
-    """Test the static config directory setting"""
-    # Save original value to restore later
-    original_config_dir = AnsibleTestScenario.CONFIG_DIR
-    
-    try:
-        # Test with a valid directory (using /tmp which should exist on most systems)
-        test_dir = tempfile.gettempdir()
-        result = AnsibleTestScenario.set_config_dir(test_dir)
-        assert result == test_dir
-        assert AnsibleTestScenario.CONFIG_DIR == test_dir
-        
-        # Test with None/empty should raise an error if no environment variable
-        original_env = os.environ.get('ANSIBLE_PLAYTEST_CONFIG_DIR')
-        if 'ANSIBLE_PLAYTEST_CONFIG_DIR' in os.environ:
-            del os.environ['ANSIBLE_PLAYTEST_CONFIG_DIR']
-        
-        with pytest.raises(ValueError, match="Config directory cannot be empty"):
-            AnsibleTestScenario.set_config_dir(None)
-            
-        # Test with invalid directory
-        with pytest.raises(ValueError, match="Invalid config directory"):
-            AnsibleTestScenario.set_config_dir("/path/does/not/exist/hopefully")
-            
-        # Restore original env var if it existed
-        if original_env:
-            os.environ['ANSIBLE_PLAYTEST_CONFIG_DIR'] = original_env
-    
-    finally:
-        # Restore original value
-        AnsibleTestScenario.CONFIG_DIR = original_config_dir
