@@ -24,6 +24,7 @@ dependencies = [
     "ansible-runner>=2.0.0",
     "pyyaml>=5.1",
     "aiosmtpd>=1.2.0",
+    "pytest>=6.0.0",
 ]
 
 [project.scripts]

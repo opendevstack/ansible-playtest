@@ -10,9 +10,10 @@ import os
 import sys
 import tempfile
 from unittest.mock import patch, MagicMock
+import pytest
+
 from ansible_playbook_runner.ansible_runner_api import run_playbook
 
-import pytest
 
 class TestAnsibleRunnerAPI:
     @pytest.fixture

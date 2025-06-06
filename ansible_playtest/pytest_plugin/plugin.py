@@ -33,7 +33,11 @@ def setup_ansible_environment(request):
     if custom_ansible_cfg:
         ansible_cfg_path = custom_ansible_cfg
     else:
-        ansible_cfg_path = os.path.join(os.path.dirname(__file__), "ansible.cfg")
+        ansible_cfg_path = os.path.abspath(
+            os.path.join(
+                os.path.dirname(__file__), "..", "..", "resources", "ansible.cfg"
+            )
+        )
 
     os.environ["ANSIBLE_CONFIG"] = ansible_cfg_path
 
@@ -46,6 +50,20 @@ def setup_ansible_environment(request):
     os.environ["ANSIBLE_CALLBACK_PLUGINS"] = callback_dir
 
     os.environ["ANSIBLE_CALLBACKS_ENABLED"] = "mock_module_tracker"
+
+    # Set up custom collections path if specified
+    collections_dir = request.config.getoption(
+        "--ansible-playtest-collections-dir"
+    )
+    if collections_dir:
+        os.environ["ANSIBLE_PLAYTEST_COLLECTIONS_DIR"] = collections_dir
+
+    # Set up custom mock collections path if specified
+    mock_collections_dir = request.config.getoption(
+        "--ansible-playtest-mock-collections-dir"
+    )
+    if mock_collections_dir:
+        os.environ["ANSIBLE_PLAYTEST_MOCK_COLLECTIONS_DIR"] = mock_collections_dir
 
     # Set up custom mocked collections path if specified
     mocked_collections = request.config.getoption(
@@ -93,6 +111,14 @@ def mock_modules(request):
 
 @pytest.fixture
 def playbook_runner(request):
+    playbook_path = None
+    scenario_path = None
+    inventory_path = None
+    extra_vars = None
+    keep_artifacts = False
+    use_virtualenv = False
+    requirements = None
+    
     if hasattr(request, "param"):
         playbook_path = request.param.get("playbook_path")
         scenario_path = request.param.get("scenario_path")
@@ -103,11 +129,12 @@ def playbook_runner(request):
         scenario_path = func_args.get("scenario_path")
 
     # Get other parameters from node attributes or CLI options
-    inventory_path = getattr(
-        request.node,
-        "inventory_path",
-        request.config.getoption("--ansible-playtest-inventory", None),
-    )
+    marker = request.node.get_closest_marker("inventory_path")
+    if marker and marker.args:
+        inventory_path = marker.args[0]    
+    if not inventory_path:
+       inventory_path = request.config.getoption("--ansible-playtest-inventory", None)
+       
     extra_vars = getattr(request.node, "extra_vars", None)
 
     # Check for keep_artifacts marker first, then fall back to command line option
@@ -146,9 +173,15 @@ def playbook_runner(request):
         if virtualenv_marker and virtualenv_marker.kwargs.get("requirements"):
             requirements = virtualenv_marker.kwargs.get("requirements")
 
+    # Get mock_collections_dir
+    mock_collections_dir = getattr(request.node, "funcargs", {}).get("mock_collections_dir")
+    
     # Create a new PlaybookRunner instance
     runner = PlaybookRunner(
-        scenario=scenario_path, use_virtualenv=use_virtualenv, requirements=requirements
+        scenario=scenario_path, 
+        use_virtualenv=use_virtualenv, 
+        requirements=requirements,
+        mock_collections_dir=mock_collections_dir
     )
 
     # Set up virtualenv if needed before running the playbook
@@ -221,6 +254,12 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="Directory containing scenario files to test",
     )
     group.addoption(
+        "--ansible-playtest-mock-collections-dir",
+        action="store",
+        default=os.environ.get("ANSIBLE_PLAYTEST_MOCK_COLLECTIONS_DIR", None),
+        help="Path to directory containing mock collections for testing",
+    )
+    group.addoption(
         "--ansible-playtest-playbook-dir",
         action="store",
         default=os.environ.get("ANSIBLE_PLAYTEST_PLAYBOOKS_DIR", "playbooks"),
@@ -243,6 +282,12 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         action="store",
         default=os.environ.get("ANSIBLE_PLAYTEST_MOCKED_COLLECTIONS", None),
         help="Path to directory with mocked Ansible collections",
+    )
+    group.addoption(
+        "--ansible-playtest-collections-dir",
+        action="store",
+        default=os.environ.get("ANSIBLE_PLAYTEST_COLLECTIONS_DIR", None),
+        help="Path to the ansible_collections directory to use for tests",
     )
     group.addoption(
         "--skip-auto-discovery",
@@ -293,3 +338,36 @@ def pytest_configure(config):
         "markers",
         "use_virtualenv(requirements=None): run the playbook in a virtual environment",
     )
+    config.addinivalue_line(
+        "markers",
+        "mock_collections_dir(path): specify path to mock collections directory",
+    )
+
+
+@pytest.fixture
+def mock_collections_dir(request):
+    """Get mock collections directory from marker or option"""
+    mock_dir = None
+    
+    # First check if there's a marker on the test
+    marker = request.node.get_closest_marker("mock_collections_dir")
+    if marker and marker.args:
+        mock_dir = marker.args[0]
+    
+    # If no marker, check request param
+    if not mock_dir:
+        mock_dir = getattr(request.node, "mock_collections_dir", None)
+
+    # If no marker or request param, check command line option
+    if not mock_dir:
+        mock_dir = request.config.getoption("--ansible-playtest-mock-collections-dir", None)
+    
+    # If no path from marker, request param, or CLI, check environment variable
+    if not mock_dir:
+        mock_dir = os.environ.get("ANSIBLE_PLAYTEST_MOCK_COLLECTIONS_DIR", None)
+        
+    # Convert to absolute path if it's a relative path
+    if mock_dir and not os.path.isabs(mock_dir):
+        mock_dir = os.path.abspath(os.path.join(os.getcwd(), mock_dir))
+        
+    return mock_dir
