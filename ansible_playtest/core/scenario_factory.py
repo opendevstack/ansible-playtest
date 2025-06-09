@@ -188,26 +188,9 @@ class ScenarioFactory:
                             continue
 
                         rel_path = os.path.relpath(scenario_path, self.scenarios_dir)
-                        # scenario_id: playbook + folder + scenario file name
-                        scenario_folder = os.path.dirname(rel_path)
-                        scenario_file = os.path.splitext(os.path.basename(rel_path))[0]
-                        playbook_base = os.path.splitext(
-                            os.path.basename(playbook_name)
-                        )[0]
-                        if scenario_folder:
-                            scenario_id = (
-                                f"{playbook_base}/{scenario_folder}/{scenario_file}"
-                            )
-                        else:
-                            scenario_id = f"{playbook_base}/{scenario_file}"
-                        logger.info(
-                            "Found scenario: %s using playbook: %s",
-                            scenario_id,
-                            playbook_path,
-                        )
-                        scenarios.append((scenario_path, playbook_path, scenario_id))
+                        scenarios.append((scenario_path, playbook_path, f"{playbook_name}--{rel_path}"))
                     except Exception as e:
                         logger.error(
                             "Error processing scenario %s: %s", scenario_path, str(e)
                         )
-        return scenarios
+        return sorted(scenarios)
