@@ -1,11 +1,19 @@
-""" """
+"""
+Functions for running Ansible playbooks using the ansible-runner API.
+"""
 
 import os
 import logging  # Keep this for log levels
 import json
 import tempfile
+import sys
 from typing import Optional, Dict, List, Any, Union
-import ansible_runner
+
+# Try importing ansible_runner - we'll handle the ImportError in run_playbook
+try:
+    import ansible_runner
+except ImportError:
+    ansible_runner = None
 
 from ansible_playbook_runner.environment import VirtualEnvironment
 from ansible_playtest.utils.logger import get_logger
@@ -54,14 +62,22 @@ def run_playbook(
 
     Returns:
         dict: The result of the playbook execution.
+    
+    Raises:
+        ImportError: If ansible_runner module is not available.
     """
+    # Check if ansible_runner is available
+    if ansible_runner is None:
+        raise ImportError("ansible_runner is required to run playbooks")
+    
     # Create a temp dir if using virtualenv and no path provided
     temp_dir = None
     venv = None
     output = {
-        "status": "sucessful",
+        "status": "successful",  # Fix typo in "successful"
         "rc": 0,
         "success": True,
+        "stats": {},  # Always include stats key, even if empty
     }
 
     logger.info("Running playbook: %s", playbook_path)
@@ -160,11 +176,14 @@ def run_playbook(
                 }
 
         else:
-
             # When not using virtualenv, we can directly use the ansible_runner module
             # Set environment variables if provided
             if env_vars:
                 run_options["envvars"] = env_vars
+
+            # Ensure private_data_dir exists if specified
+            if private_data_dir and not os.path.exists(private_data_dir):
+                os.makedirs(private_data_dir, exist_ok=True)
 
             # Using Any type for now - the type checker doesn't recognize ansible_runner.RunnerConfig type
             result: Any = ansible_runner.run(**run_options)
@@ -175,6 +194,7 @@ def run_playbook(
                 "status": result.status,
                 "rc": result.rc,
                 "success": result.status == "successful",
+                "stats": getattr(result, "stats", {})  # Include stats if available
             }
 
         if output.get("success", False):
