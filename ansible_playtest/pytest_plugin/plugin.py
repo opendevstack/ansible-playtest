@@ -28,18 +28,10 @@ def setup_ansible_environment(request):
     original_env = os.environ.copy()
 
     # Set up the environment for all tests
-    # Check if a custom ansible.cfg is provided via CLI option
-    custom_ansible_cfg = request.config.getoption("--ansible-playtest-ansible-cfg")
-    if custom_ansible_cfg:
-        ansible_cfg_path = custom_ansible_cfg
-    else:
-        ansible_cfg_path = os.path.abspath(
-            os.path.join(
-                os.path.dirname(__file__), "..", "..", "resources", "ansible.cfg"
-            )
-        )
-
-    os.environ["ANSIBLE_CONFIG"] = ansible_cfg_path
+    # Use a helper function to determine the ansible.cfg path
+    ansible_cfg_path = _get_ansible_cfg_path(request)
+    if ansible_cfg_path is not None:
+        os.environ["ANSIBLE_CONFIG"] = ansible_cfg_path
 
     # Find the absolute path to the ansible_callback directory that contains mock_module_tracker.py
     # This will work whether the package is installed or in development mode
@@ -52,9 +44,7 @@ def setup_ansible_environment(request):
     os.environ["ANSIBLE_CALLBACKS_ENABLED"] = "mock_module_tracker"
 
     # Set up custom collections path if specified
-    collections_dir = request.config.getoption(
-        "--ansible-playtest-collections-dir"
-    )
+    collections_dir = request.config.getoption("--ansible-playtest-collections-dir")
     if collections_dir:
         os.environ["ANSIBLE_PLAYTEST_COLLECTIONS_DIR"] = collections_dir
 
@@ -81,9 +71,9 @@ def setup_ansible_environment(request):
 
 
 @pytest.fixture
-def smtp_mock(request):
+def smtp_mock_server(request):
     """Get SMTP mock configuration from marker and start SMTP mock server"""
-    marker = request.node.get_closest_marker("smtp_mock")
+    marker = request.node.get_closest_marker("smtp_mock_server")
     port = 1025  # Default SMTP port
 
     if marker and marker.kwargs.get("port"):
@@ -118,7 +108,7 @@ def playbook_runner(request):
     keep_artifacts = False
     use_virtualenv = False
     requirements = None
-    
+
     if hasattr(request, "param"):
         playbook_path = request.param.get("playbook_path")
         scenario_path = request.param.get("scenario_path")
@@ -128,13 +118,8 @@ def playbook_runner(request):
         playbook_path = func_args.get("playbook_path")
         scenario_path = func_args.get("scenario_path")
 
-    # Get other parameters from node attributes or CLI options
-    marker = request.node.get_closest_marker("inventory_path")
-    if marker and marker.args:
-        inventory_path = marker.args[0]    
-    if not inventory_path:
-       inventory_path = request.config.getoption("--ansible-playtest-inventory", None)
-       
+    inventory_path = _get_inventory_path(request)
+
     extra_vars = getattr(request.node, "extra_vars", None)
 
     # Check for keep_artifacts marker first, then fall back to command line option
@@ -174,14 +159,16 @@ def playbook_runner(request):
             requirements = virtualenv_marker.kwargs.get("requirements")
 
     # Get mock_collections_dir
-    mock_collections_dir = getattr(request.node, "funcargs", {}).get("mock_collections_dir")
-    
+    mock_collections_dir = getattr(request.node, "funcargs", {}).get(
+        "mock_collections_dir"
+    )
+
     # Create a new PlaybookRunner instance
     runner = PlaybookRunner(
-        scenario=scenario_path, 
-        use_virtualenv=use_virtualenv, 
+        scenario=scenario_path,
+        use_virtualenv=use_virtualenv,
         requirements=requirements,
-        mock_collections_dir=mock_collections_dir
+        mock_collections_dir=mock_collections_dir,
     )
 
     # Set up virtualenv if needed before running the playbook
@@ -327,7 +314,7 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "mock_modules(modules): mock the specified list of Ansible modules"
     )
-    config.addinivalue_line("markers", "smtp_mock(port=1025): enable SMTP mock server")
+    config.addinivalue_line("markers", "smtp_mock_server(port=1025): enable SMTP mock server")
     config.addinivalue_line(
         "markers", "ansible_scenario(name): identify a test as an Ansible scenario test"
     )
@@ -348,26 +335,87 @@ def pytest_configure(config):
 def mock_collections_dir(request):
     """Get mock collections directory from marker or option"""
     mock_dir = None
-    
+
     # First check if there's a marker on the test
     marker = request.node.get_closest_marker("mock_collections_dir")
     if marker and marker.args:
         mock_dir = marker.args[0]
-    
+
     # If no marker, check request param
     if not mock_dir:
         mock_dir = getattr(request.node, "mock_collections_dir", None)
 
     # If no marker or request param, check command line option
     if not mock_dir:
-        mock_dir = request.config.getoption("--ansible-playtest-mock-collections-dir", None)
-    
+        mock_dir = request.config.getoption(
+            "--ansible-playtest-mock-collections-dir", None
+        )
+
     # If no path from marker, request param, or CLI, check environment variable
     if not mock_dir:
         mock_dir = os.environ.get("ANSIBLE_PLAYTEST_MOCK_COLLECTIONS_DIR", None)
-        
+
     # Convert to absolute path if it's a relative path
     if mock_dir and not os.path.isabs(mock_dir):
         mock_dir = os.path.abspath(os.path.join(os.getcwd(), mock_dir))
-        
+
     return mock_dir
+
+
+def _get_inventory_path(request):
+    """Helper function to get inventory path from marker or CLI option."""
+    marker = request.node.get_closest_marker("inventory_path")
+    inventory_path = None
+
+    if marker and marker.args:
+        inventory_path = marker.args[0]
+    else:
+        inventory_path = request.config.getoption("--ansible-playtest-inventory", None)
+
+    if inventory_path:
+        if not os.path.isabs(inventory_path):
+            inventory_path = os.path.abspath(os.path.join(os.getcwd(), inventory_path))
+
+        if not os.path.exists(inventory_path):
+            print(f"Warning: Inventory path '{inventory_path}' does not exist.")
+            return None  # Or raise an exception, depending on desired behavior
+
+    return inventory_path
+
+
+def _get_ansible_cfg_path(request):
+    """
+    Determine the path to the ansible.cfg file.
+    It checks if a custom ansible.cfg is provided via marker or CLI option.
+    If not, it uses the default ansible.cfg in the resources directory.
+    """
+    marker = request.node.get_closest_marker("ansible_cfg_path")
+    ansible_cfg_path = None
+
+    if marker and marker.args:
+        ansible_cfg_path = marker.args[0]
+    else:
+        ansible_cfg_path = request.config.getoption(
+            "--ansible-playtest-ansible-cfg", None
+        )
+
+    if ansible_cfg_path:
+        if not os.path.isabs(ansible_cfg_path):
+            ansible_cfg_path = os.path.abspath(
+                os.path.join(os.getcwd(), ansible_cfg_path)
+            )
+
+        if not os.path.exists(ansible_cfg_path):
+            print(f"Warning: Ansible config path '{ansible_cfg_path}' does not exist.")
+            return None  # Or raise an exception, depending on desired behavior
+
+        return ansible_cfg_path
+
+    # If no custom ansible_cfg is provided, use the default one in the resources directory
+    ansible_cfg_path = os.path.abspath(os.path.join(os.getcwd(), "ansible.cfg"))
+
+    # If there is a file named ansible.cfg in current directory, use it
+    if not os.path.exists("ansible.cfg"):
+        return None
+
+    return ansible_cfg_path
