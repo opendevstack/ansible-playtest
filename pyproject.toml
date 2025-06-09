@@ -41,3 +41,4 @@ ansible_playtest = ["plugins/**/*"]
 
 [project.entry-points.pytest11]
 ansible_playtest = "ansible_playtest.pytest_plugin.plugin"
+ansible_playtest_module_mocker = "ansible_playtest.pytest_plugin.plugin_module_mocker"

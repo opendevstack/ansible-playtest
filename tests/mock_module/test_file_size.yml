@@ -1,0 +1,14 @@
+---
+- name: Test file size module
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Get file size of a file
+      community.general.filesize:
+        path: /tmp/randomfile.txt
+        size: 1024B
+      register: file_size_result
+      
+    - name: Display file size
+      debug:
+        msg: "File size is {{ file_size_result.size }} bytes"
