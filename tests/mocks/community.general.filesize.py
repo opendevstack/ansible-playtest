@@ -43,11 +43,14 @@ from ansible.module_utils.basic import AnsibleModule
 
 
 def main():
-    # Use a real AnsibleModule with empty argument_spec to accept any parameters
+    # Define all expected parameters explicitly in the argument_spec
     module = AnsibleModule(
-        argument_spec={},  # Empty dict - will accept any parameter
+        argument_spec=dict(
+            path=dict(type='str'),
+            size=dict(type='raw')
+        ),
         supports_check_mode=True,
-        bypass_checks=True  # Skip parameter validation
+        bypass_checks=True  # Still keep this for additional flexibility
     )
     
     # Get path parameter or use default
