@@ -15,6 +15,7 @@ import shutil
 from ansible_playtest.core.scenario_factory import ScenarioFactory
 from ansible_playbook_runner.environment import VirtualEnvironment
 from ansible_playbook_runner.ansible_runner_api import run_playbook
+from ansible_playtest.mocks.module_mock_manager import ModuleMockManager
 
 # Add the parent directory to path
 parent_dir = os.path.dirname(os.path.abspath(__file__))
@@ -22,7 +23,6 @@ project_dir = os.path.dirname(parent_dir)
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-from ansible_playtest.core.ansible_mocking.module_mock_manager import ModuleMockManager
 
 
 class PlaybookRunner:
