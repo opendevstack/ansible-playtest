@@ -1,5 +1,5 @@
 """
-ModuleMockManager class for managing mock configurations and environment variables for Ansible module mocking.
+ModuleMockConfigurationManager class for managing mock configurations and environment variables for Ansible module mocking.
 
 This module provides functionality to create, manage, and clean up mock configurations
 for Ansible modules during testing. It allows specifying mock responses for modules
@@ -10,7 +10,7 @@ import os
 import json
 
 
-class ModuleMockManager:
+class ModuleMockConfigurationManager:
     """Handles creation of mock config files and environment variables for Ansible module mocking."""
 
     def __init__(self, temp_dir):

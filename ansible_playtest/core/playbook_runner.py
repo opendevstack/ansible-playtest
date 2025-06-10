@@ -15,7 +15,7 @@ import shutil
 from ansible_playtest.core.scenario_factory import ScenarioFactory
 from ansible_playbook_runner.environment import VirtualEnvironment
 from ansible_playbook_runner.ansible_runner_api import run_playbook
-from ansible_playtest.mocks.module_mock_manager import ModuleMockManager
+from ansible_playtest.ansible_mocker.module_mock_configuration_manager import ModuleMockConfigurationManager
 
 # Add the parent directory to path
 parent_dir = os.path.dirname(os.path.abspath(__file__))
@@ -266,13 +266,13 @@ class PlaybookRunner:
         self.overlay_mock_modules(self.temp_collections_dir)
 
         try:
-            # Create temp files for module configs using ModuleMockManager
+            # Create temp files for module configs using ModuleMockConfigurationManager
             # Dynamically extract module names from scenario's service_mocks
             service_mocks = getattr(scenario, "scenario_data", {}).get(
                 "service_mocks", {}
             )
             module_names = list(service_mocks.keys())
-            self.module_mock_manager = ModuleMockManager(self.temp_dir)
+            self.module_mock_manager = ModuleMockConfigurationManager(self.temp_dir)
             self.module_mock_manager.create_mock_configs(scenario, module_names)
             self.module_temp_files = self.module_mock_manager.module_temp_files
 

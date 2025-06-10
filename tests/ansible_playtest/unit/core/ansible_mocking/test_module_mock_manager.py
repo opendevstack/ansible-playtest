@@ -1,12 +1,12 @@
 """
-Unit tests for ModuleMockManager class in module_mock_manager.py
+Unit tests for ModuleMockConfigurationManager class in module_mock_manager.py
 """
 import os
 import json
 import tempfile
 import shutil
 import pytest
-from ansible_playtest.core.ansible_mocking.module_mock_manager import ModuleMockManager
+from ansible_playtest.ansible_mocker.module_mock_configuration_manager import ModuleMockConfigurationManager
 
 class DummyScenario:
     def get_mock_response(self, module_name):
@@ -20,7 +20,7 @@ def temp_dir():
 
 def test_create_mock_configs_creates_files(temp_dir):
     scenario = DummyScenario()
-    manager = ModuleMockManager(temp_dir)
+    manager = ModuleMockConfigurationManager(temp_dir)
     module_names = ['foo.bar', 'baz']
     configs = manager.create_mock_configs(scenario, module_names)
     for module in module_names:
@@ -35,7 +35,7 @@ def test_create_mock_configs_creates_files(temp_dir):
 
 def test_set_env_vars_sets_expected_vars(temp_dir):
     scenario = DummyScenario()
-    manager = ModuleMockManager(temp_dir)
+    manager = ModuleMockConfigurationManager(temp_dir)
     module_names = ['foo.bar', 'baz']
     manager.create_mock_configs(scenario, module_names)
     env = {}
@@ -47,7 +47,7 @@ def test_set_env_vars_sets_expected_vars(temp_dir):
 
 def test_cleanup_removes_files(temp_dir):
     scenario = DummyScenario()
-    manager = ModuleMockManager(temp_dir)
+    manager = ModuleMockConfigurationManager(temp_dir)
     module_names = ['foo.bar', 'baz']
     configs = manager.create_mock_configs(scenario, module_names)
     # Files should exist

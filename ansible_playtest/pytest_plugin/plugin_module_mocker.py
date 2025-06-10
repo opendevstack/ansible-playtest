@@ -1,5 +1,5 @@
 import pytest
-from ansible_playtest.mocks.module_mocker import ModuleMocker
+from ansible_playtest.ansible_mocker.module_mocker import ModuleMocker
 
 
 @pytest.fixture

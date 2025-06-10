@@ -71,7 +71,7 @@ def test_run_playbook_with_scenario_success_flow(runner, tmp_path):
     # Create a dummy playbook file
     playbook_path = tmp_path / 'dummy_playbook.yml'
     playbook_path.write_text('- hosts: all\n  tasks: []\n')
-    # Patch load_scenario, ModuleMockManager, MockSMTPServer, ansible_runner.run
+    # Patch load_scenario, ModuleMockConfigurationManager, MockSMTPServer, ansible_runner.run
     dummy_scenario = mock.Mock()
     dummy_scenario.get_name.return_value = 'Test Scenario'
     dummy_scenario.get_description.return_value = 'desc'
@@ -80,7 +80,7 @@ def test_run_playbook_with_scenario_success_flow(runner, tmp_path):
     dummy_scenario.verification_strategies = [mock.Mock(get_status=lambda: True)]
     dummy_scenario.expects_failure.return_value = False
     with mock.patch('ansible_playtest.core.scenario_factory.ScenarioFactory.load_scenario', return_value=dummy_scenario), \
-         mock.patch('ansible_playtest.core.playbook_runner.ModuleMockManager') as MockManager, \
+         mock.patch('ansible_playtest.core.playbook_runner.ModuleMockConfigurationManager') as MockManager, \
          mock.patch('ansible_playtest.core.playbook_runner.ansible_runner.run') as mock_run:
         mock_manager = MockManager.return_value
         mock_manager.create_mock_configs.return_value = {}

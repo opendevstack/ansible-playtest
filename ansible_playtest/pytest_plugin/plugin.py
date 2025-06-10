@@ -49,11 +49,11 @@ def setup_ansible_environment(request):
         os.environ["ANSIBLE_PLAYTEST_COLLECTIONS_DIR"] = collections_dir
 
     # Set up custom mock collections path if specified
-    mock_collections_dir = request.config.getoption(
+    collections_mock_dir = request.config.getoption(
         "--ansible-playtest-mock-collections-dir"
     )
-    if mock_collections_dir:
-        os.environ["ANSIBLE_PLAYTEST_MOCK_COLLECTIONS_DIR"] = mock_collections_dir
+    if collections_mock_dir:
+        os.environ["ANSIBLE_PLAYTEST_MOCK_COLLECTIONS_DIR"] = collections_mock_dir
 
     # Set up custom mocked collections path if specified
     mocked_collections = request.config.getoption(
@@ -122,53 +122,24 @@ def playbook_runner(request):
 
     extra_vars = getattr(request.node, "extra_vars", None)
 
-    # Check for keep_artifacts marker first, then fall back to command line option
-    keep_artifacts_marker = request.node.get_closest_marker("keep_artifacts")
-    keep_artifacts = keep_artifacts_marker is not None or request.config.getoption(
-        "--ansible-playtest-keep-artifacts", False
-    )
+    keep_artifacts = _get_keep_artifacts(request)
 
-    # Check for virtualenv markers and options
-    use_virtualenv = request.config.getoption(
-        "--ansible-playtest-use-virtualenv", False
-    )
-    virtualenv_marker = request.node.get_closest_marker("use_virtualenv")
-    if virtualenv_marker is not None:
-        use_virtualenv = True
+    use_virtualenv = _get_use_virtualenv(request)
 
     # Get requirements options
     requirements = None
     if use_virtualenv:
-        requirements_file = request.config.getoption(
-            "--ansible-playtest-requirements", None
-        )
-        requirements_packages = request.config.getoption(
-            "--ansible-playtest-requirements-packages", []
-        )
-
-        if requirements_file and requirements_packages:
-            print("Warning: Both requirements file and packages specified. Using file.")
-            requirements = requirements_file
-        elif requirements_file:
-            requirements = requirements_file
-        elif requirements_packages:
-            requirements = requirements_packages
-
-        # Check for marker-specific requirements
-        if virtualenv_marker and virtualenv_marker.kwargs.get("requirements"):
-            requirements = virtualenv_marker.kwargs.get("requirements")
+        requirements = _get_requirements(request)
 
     # Get mock_collections_dir
-    mock_collections_dir = getattr(request.node, "funcargs", {}).get(
-        "mock_collections_dir"
-    )
+    mock_collections_directory = _get_mock_collections_dir(request)
 
     # Create a new PlaybookRunner instance
     runner = PlaybookRunner(
         scenario=scenario_path,
         use_virtualenv=use_virtualenv,
         requirements=requirements,
-        mock_collections_dir=mock_collections_dir,
+        mock_collections_dir=mock_collections_directory,
     )
 
     # Set up virtualenv if needed before running the playbook
@@ -201,9 +172,9 @@ def pytest_generate_tests(metafunc):
         "scenario_path" in metafunc.fixturenames
         and "playbook_path" in metafunc.fixturenames
     ):
-        # Get scenarios and playbooks directory from command line options or use defaults
-        scenarios_dir = metafunc.config.getoption("--ansible-playtest-scenarios-dir")
-        playbooks_dir = metafunc.config.getoption("--ansible-playtest-playbook-dir")
+        # Get scenarios and playbooks directory from markers or command line options
+        scenarios_dir = _get_scenarios_dir(metafunc)
+        playbooks_dir = _get_playbooks_dir(metafunc)
 
         # Use ScenarioFactory to discover scenarios
         factory = ScenarioFactory(
@@ -314,7 +285,9 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "mock_modules(modules): mock the specified list of Ansible modules"
     )
-    config.addinivalue_line("markers", "smtp_mock_server(port=1025): enable SMTP mock server")
+    config.addinivalue_line(
+        "markers", "smtp_mock_server(port=1025): enable SMTP mock server"
+    )
     config.addinivalue_line(
         "markers", "ansible_scenario(name): identify a test as an Ansible scenario test"
     )
@@ -327,39 +300,24 @@ def pytest_configure(config):
     )
     config.addinivalue_line(
         "markers",
+        "requirements_file(path): specify path to requirements file for virtual environment",
+    )
+    config.addinivalue_line(
+        "markers",
         "mock_collections_dir(path): specify path to mock collections directory",
     )
-
-
-@pytest.fixture
-def mock_collections_dir(request):
-    """Get mock collections directory from marker or option"""
-    mock_dir = None
-
-    # First check if there's a marker on the test
-    marker = request.node.get_closest_marker("mock_collections_dir")
-    if marker and marker.args:
-        mock_dir = marker.args[0]
-
-    # If no marker, check request param
-    if not mock_dir:
-        mock_dir = getattr(request.node, "mock_collections_dir", None)
-
-    # If no marker or request param, check command line option
-    if not mock_dir:
-        mock_dir = request.config.getoption(
-            "--ansible-playtest-mock-collections-dir", None
-        )
-
-    # If no path from marker, request param, or CLI, check environment variable
-    if not mock_dir:
-        mock_dir = os.environ.get("ANSIBLE_PLAYTEST_MOCK_COLLECTIONS_DIR", None)
-
-    # Convert to absolute path if it's a relative path
-    if mock_dir and not os.path.isabs(mock_dir):
-        mock_dir = os.path.abspath(os.path.join(os.getcwd(), mock_dir))
-
-    return mock_dir
+    config.addinivalue_line(
+        "markers",
+        "inventory_path(path): specify path to the inventory file",
+    )
+    config.addinivalue_line(
+        "markers",
+        "scenarios_dir(path): specify path to the scenarios directory",
+    )
+    config.addinivalue_line(
+        "markers",
+        "playbooks_dir(path): specify path to the playbooks directory",
+    )
 
 
 def _get_inventory_path(request):
@@ -419,3 +377,164 @@ def _get_ansible_cfg_path(request):
         return None
 
     return ansible_cfg_path
+
+
+def _get_scenarios_dir(request_or_metafunc):
+    """
+    Helper function to get scenarios directory from marker or CLI option.
+    Works with both request and metafunc objects.
+    """
+    scenarios_dir = None
+
+    # Handle different object types (request vs metafunc)
+    if hasattr(request_or_metafunc, "node"):
+        # This is a request object
+        marker = request_or_metafunc.node.get_closest_marker("scenarios_dir")
+        if marker and marker.args:
+            scenarios_dir = marker.args[0]
+    else:
+        if hasattr(request_or_metafunc, "definition") and hasattr(
+            request_or_metafunc.definition, "own_markers"
+        ):
+            for mark in request_or_metafunc.definition.own_markers:
+                if mark.name == "scenarios_dir" and mark.args:
+                    scenarios_dir = mark.args[0]
+                    break
+
+    # If not found in markers, use CLI option
+    if not scenarios_dir:
+        config = request_or_metafunc.config
+        scenarios_dir = config.getoption("--ansible-playtest-scenarios-dir")
+
+    # Convert to absolute path if it's a relative path
+    if scenarios_dir and not os.path.isabs(scenarios_dir):
+        scenarios_dir = os.path.abspath(os.path.join(os.getcwd(), scenarios_dir))
+
+    return scenarios_dir
+
+
+def _get_playbooks_dir(request_or_metafunc):
+    """
+    Helper function to get playbooks directory from marker or CLI option.
+    Works with both request and metafunc objects.
+    """
+    playbooks_dir = None
+
+    # Handle different object types (request vs metafunc)
+    if hasattr(request_or_metafunc, "node"):
+        # This is a request object
+        marker = request_or_metafunc.node.get_closest_marker("playbooks_dir")
+        if marker and marker.args:
+            playbooks_dir = marker.args[0]
+    else:
+        if hasattr(request_or_metafunc, "definition") and hasattr(
+            request_or_metafunc.definition, "own_markers"
+        ):
+            for mark in request_or_metafunc.definition.own_markers:
+                if mark.name == "playbooks_dir" and mark.args:
+                    playbooks_dir = mark.args[0]
+                    break
+
+    # If not found in markers, use CLI option
+    if not playbooks_dir:
+        config = request_or_metafunc.config
+        playbooks_dir = config.getoption("--ansible-playtest-playbook-dir")
+
+    # Convert to absolute path if it's a relative path
+    if playbooks_dir and not os.path.isabs(playbooks_dir):
+        playbooks_dir = os.path.abspath(os.path.join(os.getcwd(), playbooks_dir))
+
+    return playbooks_dir
+
+
+def _get_keep_artifacts(request):
+    """
+    Determine whether to keep test artifacts based on the pytest configuration and markers.
+    """
+    # Check for keep_artifacts marker first, then fall back to command line option
+    keep_artifacts_marker = request.node.get_closest_marker("keep_artifacts")
+    keep_artifacts = keep_artifacts_marker is not None or request.config.getoption(
+        "--ansible-playtest-keep-artifacts", False
+    )
+    return keep_artifacts
+
+
+def _get_requirements(request):
+    """
+    Determine which requirements to use based on markers and configuration options.
+    Returns a file path, list of packages, or None.
+    """
+    requirements = None
+
+    # Check for requirements_file marker first
+    requirements_marker = request.node.get_closest_marker("requirements_file")
+    if requirements_marker and requirements_marker.args:
+        return requirements_marker.args[0]
+
+    # Next try command-line options
+    requirements_file = request.config.getoption(
+        "--ansible-playtest-requirements", None
+    )
+    requirements_packages = request.config.getoption(
+        "--ansible-playtest-requirements-packages", []
+    )
+
+    if requirements_file and requirements_packages:
+        print("Warning: Both requirements file and packages specified. Using file.")
+        requirements = requirements_file
+    elif requirements_file:
+        requirements = requirements_file
+    elif requirements_packages:
+        requirements = requirements_packages
+
+    # Finally, check virtualenv marker requirements parameter
+    virtualenv_marker = request.node.get_closest_marker("use_virtualenv")
+    if virtualenv_marker and virtualenv_marker.kwargs.get("requirements"):
+        requirements = virtualenv_marker.kwargs.get("requirements")
+
+    return requirements
+
+
+def _get_mock_collections_dir(request):
+    """
+    Get the mock collections directory from marker, options, or environment variables.
+    """
+    mock_dir = None
+
+    # First check if there's a marker on the test
+    marker = request.node.get_closest_marker("mock_collections_dir")
+    if marker and marker.args:
+        mock_dir = marker.args[0]
+
+    # If no marker, check request param
+    if not mock_dir:
+        mock_dir = getattr(request.node, "mock_collections_dir", None)
+
+    # If no marker or request param, check command line option
+    if not mock_dir:
+        mock_dir = request.config.getoption(
+            "--ansible-playtest-mock-collections-dir", None
+        )
+
+    # Convert to absolute path if it's a relative path
+    if mock_dir and not os.path.isabs(mock_dir):
+        mock_dir = os.path.abspath(os.path.join(os.getcwd(), mock_dir))
+
+    return mock_dir
+
+
+def _get_use_virtualenv(request):
+    """
+    Determine whether to use a virtual environment based on the pytest configuration and markers.
+    """
+    # Check for the command line option first
+    use_virtualenv = request.config.getoption(
+        "--ansible-playtest-use-virtualenv", False
+    )
+
+    # Override with the marker if it exists
+    virtualenv_marker = request.node.get_closest_marker("use_virtualenv")
+    if virtualenv_marker is not None:
+        use_virtualenv = True
+
+    return use_virtualenv
