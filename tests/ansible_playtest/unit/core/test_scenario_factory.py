@@ -2,8 +2,6 @@
 Unit tests for ScenarioFactory class in scenario_factory.py
 """
 import os
-import tempfile
-import shutil
 import yaml
 import pytest
 from ansible_playtest.core.scenario_factory import ScenarioFactory
@@ -21,8 +19,8 @@ def temp_scenarios_dir(tmp_path):
     playbooks_dir.mkdir()
     # Create a valid scenario file
     scenario_path = scenarios_dir / "test_scenario.yaml"
-    playbook_path = playbooks_dir / "test_playbook.yml"
-    scenario_data = {"playbook": "test_playbook.yml"}
+    playbook_path = playbooks_dir / "test_playbook.yaml"
+    scenario_data = {"playbook": "test_playbook.yaml"}
     with open(scenario_path, "w") as f:
         yaml.safe_dump(scenario_data, f)
     with open(playbook_path, "w") as f:
@@ -52,9 +50,9 @@ def test_discover_scenarios(temp_scenarios_dir):
     scenarios = factory.discover_scenarios()
     assert len(scenarios) == 1
     scenario_path, playbook_path, scenario_id = scenarios[0]
-    assert scenario_id == "test_playbook/test_scenario"
+    assert scenario_id == "test_playbook.yaml--test_scenario.yaml"
     assert scenario_path.endswith("test_scenario.yaml")
-    assert playbook_path.endswith("test_playbook.yml")
+    assert playbook_path.endswith("test_playbook.yaml")
 
 def test_load_scenario_not_found(temp_scenarios_dir):
     factory = ScenarioFactory(config_dir=str(temp_scenarios_dir))

@@ -2,9 +2,9 @@
 Unit tests for PlaybookRunner class in playbook_runner.py
 """
 import os
-import tempfile
-import pytest
+import shutil
 from unittest import mock
+import pytest
 from ansible_playtest.core.playbook_runner import PlaybookRunner
 
 @pytest.fixture
@@ -28,7 +28,6 @@ def test_copy_real_collections_to_temp_creates_dir(runner, tmp_path):
     assert os.path.exists(temp_collections_dir)
     assert os.path.exists(os.path.join(temp_collections_dir, 'dummy'))
     # Cleanup
-    import shutil
     shutil.rmtree(collections_dir)
 
 def test_overlay_mock_modules_copies_files(runner, tmp_path):
@@ -48,7 +47,6 @@ def test_overlay_mock_modules_copies_files(runner, tmp_path):
             found = True
     assert found
     # Cleanup
-    import shutil
     shutil.rmtree(os.path.join(runner.parent_dir, 'mock_collections'))
 
 def test_run_playbook_with_scenario_playbook_not_found(runner):
@@ -94,3 +92,4 @@ def test_run_playbook_with_scenario_success_flow(runner, tmp_path):
     assert result['verification_passed']
     assert result['expected_failure'] is False
     assert 'verification' in result
+

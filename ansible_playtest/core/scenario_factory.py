@@ -3,7 +3,6 @@ Factory for loading Ansible test scenarios
 """
 
 import os
-import logging  # Keep this for log levels
 from typing import Optional, List, Tuple
 import yaml
 from ansible_playtest.core.ansible_test_scenario import AnsibleTestScenario
@@ -141,56 +140,100 @@ class ScenarioFactory:
                     scenario_id = os.path.splitext(rel_path)[0]
                     available_scenarios.append(scenario_id)
         return available_scenarios
+    
+    def _process_scenario_file(self, scenario_path: str, rel_path_source: Optional[str] = None) -> List[Tuple[str, str, str]]:
+        """
+        Process a single scenario file and extract its playbook information.
+        
+        Args:
+            scenario_path (str): Path to the scenario file
+            rel_path_source (Optional[str]): Source directory for calculating relative path.
+                                           If None, self.scenarios_dir will be used.
+                
+        Returns:
+            List[Tuple[str, str, str]]: List containing a single tuple of 
+                                        (scenario_path, playbook_path, scenario_id) if successful,
+                                        empty list otherwise
+        """
+        if not scenario_path.endswith((".yaml", ".yml")):
+            logger.warning(
+                "Provided scenario file %s is not a YAML file (.yaml, .yml)",
+                scenario_path,
+            )
+            return []
+            
+        scenarios = []
+        try:
+            with open(scenario_path, "r", encoding="utf-8") as f:
+                scenario_data = yaml.safe_load(f)
+            
+            if not scenario_data or "playbook" not in scenario_data:
+                logger.warning(
+                    "Scenario %s is missing 'playbook' field",
+                    scenario_path,
+                )
+                return []
+                
+            playbook_name = scenario_data["playbook"]
+
+            # Validate playbook existence using playbooks_dir if not absolute
+            if os.path.isabs(playbook_name):
+                playbook_path = playbook_name
+            else:
+                playbook_path = os.path.join(
+                    self.playbooks_dir, playbook_name
+                )
+
+            if not os.path.exists(playbook_path):
+                logger.warning(
+                    "Playbook %s not found for scenario %s",
+                    playbook_path,
+                    scenario_path,
+                )
+                return []
+
+            # Calculate relative path or use filename depending on context
+            if rel_path_source:
+                rel_path = os.path.relpath(scenario_path, rel_path_source)
+            else:
+                rel_path = os.path.basename(scenario_path)
+                
+            scenarios.append((scenario_path, playbook_path, f"{playbook_name}--{rel_path}"))
+            
+        except (IOError, yaml.YAMLError) as e:
+            logger.error(
+                "Error processing scenario %s: %s", scenario_path, str(e)
+            )
+            
+        return scenarios
 
     def discover_scenarios(self) -> List[Tuple[str, str, str]]:
         """
         Discover all scenario files and extract their playbook information.
+        If scenarios_dir is a file, it will only discover that specific scenario file.
 
         Returns:
             List[Tuple[str, str, str]]: (scenario_path, playbook_path, scenario_id)
         """
-        # Use the module-level logger instead of creating a new one
         scenarios: List[Tuple[str, str, str]] = []
 
         if not os.path.exists(self.scenarios_dir):
-            logger.error("Scenario directory not found: %s", self.scenarios_dir)
+            logger.error("Path provided does not exist: %s", self.scenarios_dir)
             return scenarios
 
+        # Check if scenarios_dir is a file (direct scenario file)
+        if os.path.isfile(self.scenarios_dir):
+            return self._process_scenario_file(self.scenarios_dir)
+
+        if not os.path.isdir(self.scenarios_dir):
+            logger.error("Scenario path %s exists but is not a directory or valid scenario file", self.scenarios_dir)
+            return scenarios
+
+        # Directory-based discovery
         for root, _, files in os.walk(self.scenarios_dir):
             for file in files:
                 if file.endswith((".yaml", ".yml")):
                     scenario_path = os.path.join(root, file)
-                    try:
-                        with open(scenario_path, "r", encoding="utf-8") as f:
-                            scenario_data = yaml.safe_load(f)
-                        if not scenario_data or "playbook" not in scenario_data:
-                            logger.warning(
-                                "Scenario %s is missing 'playbook' field",
-                                scenario_path,
-                            )
-                            continue
-                        playbook_name = scenario_data["playbook"]
-
-                        # Validate playbook existence using playbooks_dir if not absolute
-                        if os.path.isabs(playbook_name):
-                            playbook_path = playbook_name
-                        else:
-                            playbook_path = os.path.join(
-                                self.playbooks_dir, playbook_name
-                            )
-
-                        if not os.path.exists(playbook_path):
-                            logger.warning(
-                                "Playbook %s not found for scenario %s",
-                                playbook_path,
-                                scenario_path,
-                            )
-                            continue
-
-                        rel_path = os.path.relpath(scenario_path, self.scenarios_dir)
-                        scenarios.append((scenario_path, playbook_path, f"{playbook_name}--{rel_path}"))
-                    except Exception as e:
-                        logger.error(
-                            "Error processing scenario %s: %s", scenario_path, str(e)
-                        )
+                    scenarios.extend(self._process_scenario_file(scenario_path, self.scenarios_dir))
+                    
         return sorted(scenarios)

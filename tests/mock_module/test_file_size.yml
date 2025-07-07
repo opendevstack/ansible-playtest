@@ -1,9 +1,9 @@
 ---
 - name: Test file size module
   hosts: localhost
-  gather_facts: no
+  gather_facts: false
   tasks:
-    - name: Get file size of a file
+    - name: Creaete a file
       community.general.filesize:
         path: /tmp/randomfile.txt
         size: 1024B

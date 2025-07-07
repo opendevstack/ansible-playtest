@@ -28,7 +28,7 @@ if parent_dir not in sys.path:
 class PlaybookRunner:
     """Class for running Ansible playbooks with scenario-based testing"""
 
-    def __init__(self, scenario=None, use_virtualenv=False, requirements=None, mock_collections_dir=None):
+    def __init__(self, scenario=None, use_virtualenv=False, requirements=None, mock_collections_dir=None, module_mocker=None):
         """
         Initialize the PlaybookRunner class
 
@@ -37,6 +37,7 @@ class PlaybookRunner:
             use_virtualenv: Whether to use a virtual environment for playbook execution
             requirements: Path to requirements file or list of packages to install in the virtualenv
             mock_collections_dir: Path to directory containing mock collections (optional)
+            module_mocker: VirtualenvAwareModuleMocker instance for direct module mocking (optional)
         """
         self.scenario = scenario
         self.parent_dir = os.path.dirname(os.path.abspath(__file__))
@@ -49,6 +50,7 @@ class PlaybookRunner:
         self.use_virtualenv = use_virtualenv
         self.requirements = requirements
         self.mock_collections_dir = mock_collections_dir
+        self.module_mocker = module_mocker  # Store the module mocker reference
         # Initialize properties to store execution results
         self.success = False
         self.execution_details = {}
@@ -76,6 +78,7 @@ class PlaybookRunner:
         # 2. Check for ANSIBLE_COLLECTIONS_PATH environment variable 
         # 3. Check for collections in the current working directory (where pytest is run from)
         # 4. Check for collections in the root directory of the project using the plugin
+        # 5. Check for collections in the runner.project_dir
 
         # List of directories to check, in order of preference
         collection_dirs_to_check = []
@@ -104,6 +107,10 @@ class PlaybookRunner:
         parent_dir = os.path.dirname(current_dir)
         parent_collections_dir = os.path.join(parent_dir, "ansible_collections")
         collection_dirs_to_check.append(parent_collections_dir)
+        
+        # 5. Look in the project directory where this script is located
+        project_collections_dir = os.path.join(self.project_dir, "ansible_collections")
+        collection_dirs_to_check.append(project_collections_dir)
                     
         # Try each collections directory in order
         collections_found = False
@@ -450,6 +457,15 @@ class PlaybookRunner:
                     self.virtualenv.install_requirements(self.requirements)
                 elif isinstance(self.requirements, list):
                     self.virtualenv.install_packages(self.requirements)
+
+            # Apply module mocks to the virtual environment after installation
+            if self.module_mocker and hasattr(self.module_mocker, 'setup_mocks'):
+                print("Applying module mocks to virtual environment...")
+                try:
+                    self.module_mocker.setup_mocks(self.virtualenv.path)
+                    print("Module mocks applied successfully to virtual environment.")
+                except Exception as e:
+                    print(f"Warning: Failed to apply module mocks to virtual environment: {str(e)}")
 
             return True
 

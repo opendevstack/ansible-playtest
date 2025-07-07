@@ -20,7 +20,7 @@ classDiagram
         +get_mock_response()
         +run_verifiers()
     }
-    class ModuleMockManager {
+    class ModuleMockConfigurationManager {
         +create_mock_configs()
         +set_env_vars()
         +cleanup()
@@ -28,7 +28,7 @@ classDiagram
 
     AnsiblePlaybookTestRunner "1" --> "1" PlaybookRunner : creates/uses
     AnsiblePlaybookTestRunner "1" --> "1" AnsibleTestScenario : loads/uses
-    PlaybookRunner "1" --> "1" ModuleMockManager : creates/uses
+    PlaybookRunner "1" --> "1" ModuleMockConfigurationManager : creates/uses
     PlaybookRunner "1" --> "1" AnsibleTestScenario : uses for scenario data
     AnsibleTestScenario "1" --> "many" VerificationStrategy : creates/uses
 ```
@@ -38,7 +38,7 @@ sequenceDiagram
     participant Runner as AnsiblePlaybookTestRunner
     participant Scenario as AnsibleTestScenario
     participant PBRunner as PlaybookRunner
-    participant MockMgr as ModuleMockManager
+    participant MockMgr as ModuleMockConfigurationManager
 
     Test->>Runner: __init__(playbook_path, scenario_path, ...)
     Test->>Runner: setup()

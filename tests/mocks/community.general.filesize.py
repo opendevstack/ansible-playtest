@@ -47,7 +47,7 @@ def main():
     module = AnsibleModule(
         argument_spec=dict(
             path=dict(type='str'),
-            size=dict(type='raw')
+            size=dict(type='str')
         ),
         supports_check_mode=True,
         bypass_checks=True  # Still keep this for additional flexibility

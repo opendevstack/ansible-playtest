@@ -32,6 +32,7 @@ def setup_ansible_environment(request):
     ansible_cfg_path = _get_ansible_cfg_path(request)
     if ansible_cfg_path is not None:
         os.environ["ANSIBLE_CONFIG"] = ansible_cfg_path
+        print(f"[PLUGIN] Using ansible.cfg at {ansible_cfg_path}")
 
     # Find the absolute path to the ansible_callback directory that contains mock_module_tracker.py
     # This will work whether the package is installed or in development mode
@@ -133,6 +134,11 @@ def playbook_runner(request):
 
     # Get mock_collections_dir
     mock_collections_directory = _get_mock_collections_dir(request)
+    
+    # Check if module_mocker fixture is available
+    module_mocker = None
+    if hasattr(request, 'node') and hasattr(request.node, 'funcargs'):
+        module_mocker = request.node.funcargs.get('module_mocker')
 
     # Create a new PlaybookRunner instance
     runner = PlaybookRunner(
@@ -140,6 +146,7 @@ def playbook_runner(request):
         use_virtualenv=use_virtualenv,
         requirements=requirements,
         mock_collections_dir=mock_collections_directory,
+        module_mocker=module_mocker,
     )
 
     # Set up virtualenv if needed before running the playbook

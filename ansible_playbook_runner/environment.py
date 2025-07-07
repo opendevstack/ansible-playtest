@@ -37,7 +37,6 @@ import os
 import subprocess
 import sys
 import venv
-import logging  # Keep this for log levels
 import shutil
 from typing import List, Dict, Optional
 
@@ -52,7 +51,7 @@ class VirtualEnvironment:
     A class to manage a Python virtual environment for Ansible playbooks.
     """
 
-    def __init__(self, base_dir: str, name: str = "venv"):
+    def __init__(self, base_dir: str, name: str = "venv", created: bool = False):
         """
         Initialize a virtual environment in the specified directory.
 
@@ -66,15 +65,15 @@ class VirtualEnvironment:
         self.bin_dir = "Scripts" if sys.platform == "win32" else "bin"
         self.pip_path = os.path.join(self.path, self.bin_dir, "pip")
         self.python_path = os.path.join(self.path, self.bin_dir, "python")
-        self._created = False
+        self._created = created
 
-    def create(self, install_playtest: bool = False) -> str:
+    def create(self, install_playtest: bool = True) -> str:
         """
         Create the virtual environment.
 
         Args:
             install_playtest: If True, installs ansible_playtest in development mode,
-                             making all mocks available in the virtual environment.
+                              making all mocks available in the virtual environment.
 
         Returns:
             str: Path to the created virtual environment.
@@ -85,10 +84,10 @@ class VirtualEnvironment:
         logger.info("Creating virtual environment in %s", self.path)
         venv.create(self.path, with_pip=True)
         self._created = True
-        
+
         if install_playtest:
             self.install_ansible_playtest()
-            
+
         return self.path
 
     def install_packages(self, packages: List[str]) -> None:
@@ -126,7 +125,12 @@ class VirtualEnvironment:
         subprocess.run([self.pip_path, "install", "-r", requirements_file], check=True)
 
     def run_command(
-        self, command: List[str], env: Optional[Dict[str, str]] = None
+        self,
+        command: List[str],
+        env: Optional[Dict[str, str]] = None,
+        capture_output: bool = False,
+        text: bool = True,
+        check: bool = False,
     ) -> subprocess.CompletedProcess:
         """
         Run a command in the virtual environment.
@@ -134,6 +138,9 @@ class VirtualEnvironment:
         Args:
             command: The command to run as a list of strings.
             env: Optional environment variables to set.
+            capture_output: Whether to capture stdout and stderr.
+            text: Whether to decode output as text.
+            check: Whether to raise an exception on non-zero exit code.
 
         Returns:
             subprocess.CompletedProcess: Result of the command execution.
@@ -143,18 +150,98 @@ class VirtualEnvironment:
                 "Virtual environment not created yet. Call create() first."
             )
 
-        # Setup environment variables
+        # Setup environment variables to activate the virtual environment
         cmd_env = os.environ.copy()
+
+        # Update with any additional environment variables provided
         if env:
             cmd_env.update(env)
 
-        # Prepend the Python interpreter path to the command
+        # Set VIRTUAL_ENV to point to the virtual environment
+        cmd_env["VIRTUAL_ENV"] = self.path
+
+        # Modify PATH to include the virtual environment's bin directory first
+        venv_bin_path = os.path.join(self.path, self.bin_dir)
+        current_path = cmd_env.get("PATH", "")
+
+        cmd_env["PATH"] = f"{venv_bin_path}{os.pathsep}{current_path}"
+
+        # Remove PYTHONHOME if it exists to avoid conflicts
+        cmd_env.pop("PYTHONHOME", None)
+        # Use the virtual environment's Python interpreter
         full_command = [self.python_path] + command
+
+        logger.debug(
+            "Running command in virtual environment: %s", " ".join(full_command)
+        )
+        logger.debug("Virtual environment PATH: %s", cmd_env.get("PATH", ""))
 
         return subprocess.run(
             full_command,
             env=cmd_env,
-            check=False,
+            check=check,
+            capture_output=capture_output,
+            text=text,
+        )
+
+    def run_shell_command(
+        self,
+        command: List[str],
+        env: Optional[Dict[str, str]] = None,
+        capture_output: bool = False,
+        text: bool = True,
+        check: bool = False,
+    ) -> subprocess.CompletedProcess:
+        """
+        Run a shell command in the virtual environment context.
+
+        This method runs commands directly (not through Python -m) but with
+        the virtual environment properly activated in the environment.
+
+        Args:
+            command: The command to run as a list of strings.
+            env: Optional environment variables to set.
+            capture_output: Whether to capture stdout and stderr.
+            text: Whether to decode output as text.
+            check: Whether to raise an exception on non-zero exit code.
+
+        Returns:
+            subprocess.CompletedProcess: Result of the command execution.
+        """
+        if not self._created:
+            raise RuntimeError(
+                "Virtual environment not created yet. Call create() first."
+            )
+
+        # Setup environment variables to activate the virtual environment
+        cmd_env = os.environ.copy()
+
+        # Set VIRTUAL_ENV to point to the virtual environment
+        cmd_env["VIRTUAL_ENV"] = self.path
+
+        # Modify PATH to include the virtual environment's bin directory first
+        venv_bin_path = os.path.join(self.path, self.bin_dir)
+        current_path = cmd_env.get("PATH", "")
+        cmd_env["PATH"] = f"{venv_bin_path}{os.pathsep}{current_path}"
+
+        # Remove PYTHONHOME if it exists to avoid conflicts
+        cmd_env.pop("PYTHONHOME", None)
+
+        # Update with any additional environment variables provided
+        if env:
+            cmd_env.update(env)
+
+        logger.debug(
+            "Running shell command in virtual environment: %s", " ".join(command)
+        )
+        logger.debug("Virtual environment PATH: %s", cmd_env.get("PATH", ""))
+
+        return subprocess.run(
+            command,
+            env=cmd_env,
+            check=check,
+            capture_output=capture_output,
+            text=text,
         )
 
     def cleanup(self) -> bool:
@@ -172,10 +259,10 @@ class VirtualEnvironment:
             shutil.rmtree(self.path, ignore_errors=True)
             self._created = False
             return True
-        except Exception as e:
+        except (OSError, IOError) as e:
             logger.error("Error removing virtual environment: %s", str(e))
             return False
-            
+
     def install_ansible_playtest(self, src_dir: Optional[str] = None) -> None:
         """
         Install the ansible_playtest package in development mode.
@@ -192,180 +279,137 @@ class VirtualEnvironment:
             # Try to find the ansible_playtest directory relative to this file
             current_dir = os.path.dirname(os.path.abspath(__file__))
             parent_dir = os.path.dirname(current_dir)
-            
+
             # Try several possible locations
-            possible_paths = [
-                os.path.join(parent_dir, "ansible_playtest"),                      # Same level as ansible_playbook_runner
-                os.path.join(os.path.dirname(parent_dir), "ansible_playtest"),     # One level up
-                os.path.join(parent_dir, "src", "ansible_playtest"),               # In src directory
-                os.path.dirname(parent_dir),                                       # Root directory containing ansible_playtest
-            ]
-            
+            possible_paths = [parent_dir, current_dir]
+
             logger.debug("Searching for ansible_playtest in: %s", possible_paths)
-            
+
             # First try to find the directory with both setup.py and ansible_playtest content
             for path in possible_paths:
                 if os.path.exists(path):
                     setup_path = os.path.join(path, "setup.py")
                     init_path = os.path.join(path, "ansible_playtest", "__init__.py")
-                    
+
                     # Check if this looks like the project root with ansible_playtest inside
                     if os.path.exists(setup_path) and os.path.exists(init_path):
                         src_dir = path
-                        logger.info("Found ansible_playtest project root at %s", src_dir)
+                        logger.info(
+                            "Found ansible_playtest project root at %s", src_dir
+                        )
                         break
-                    
+
                     # Check if this is the ansible_playtest package itself
-                    if os.path.exists(os.path.join(path, "__init__.py")) and "ansible_playtest" in path:
+                    if (
+                        os.path.exists(os.path.join(path, "__init__.py"))
+                        and "ansible_playtest" in path
+                    ):
                         mock_servers_dir = os.path.join(path, "mocks_servers")
                         if os.path.exists(mock_servers_dir):
                             src_dir = path
                             logger.info("Found ansible_playtest package at %s", src_dir)
                             break
-        
+
         # If source directory was found, install in development mode
         if src_dir and os.path.exists(src_dir):
-            logger.info("Installing ansible_playtest from %s in development mode", src_dir)
-            
+            logger.info(
+                "Installing ansible_playtest from %s in development mode", src_dir
+            )
+
             # First ensure pip is up-to-date
             subprocess.run([self.pip_path, "install", "--upgrade", "pip"], check=True)
-            
+
             # Install in development mode
-            subprocess.run(
-                [self.pip_path, "install", "-e", src_dir],
-                check=True
-            )
+            subprocess.run([self.pip_path, "install", "-e", src_dir], check=True)
             return
-        
+
         # Try to install from current directory (development mode)
         current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(os.path.dirname(current_dir))
-        
-        logger.info(f"Looking for ansible-playtest package in {project_root}")
-        if os.path.exists(os.path.join(project_root, "pyproject.toml")) or os.path.exists(os.path.join(project_root, "setup.py")):
+
+        logger.info("Looking for ansible-playtest package in %s", project_root)
+        if os.path.exists(
+            os.path.join(project_root, "pyproject.toml")
+        ) or os.path.exists(os.path.join(project_root, "setup.py")):
             logger.info("Installing ansible-playtest from current project root")
             try:
                 # First ensure pip is up-to-date
-                subprocess.run([self.pip_path, "install", "--upgrade", "pip"], check=True)
-                
+                subprocess.run(
+                    [self.pip_path, "install", "--upgrade", "pip"], check=True
+                )
+
                 # Install in development mode from project root
                 subprocess.run(
-                    [self.pip_path, "install", "-e", project_root],
-                    check=True
+                    [self.pip_path, "install", "-e", project_root], check=True
                 )
                 return
             except subprocess.CalledProcessError as e:
-                logger.error(f"Failed to install from project root: {str(e)}")
-        
+                logger.error("Failed to install from project root: %s", str(e))
+
         # Fallback: try to install from PyPI
         logger.info("ansible_playtest source directory not found, installing from pip")
         try:
             # Try to install from PyPI
             subprocess.run(
                 [self.pip_path, "install", "ansible-playtest"],  # Note the dash here
-                check=True
+                check=True,
             )
         except subprocess.CalledProcessError:
             # Try alternative package name
             try:
                 subprocess.run(
-                    [self.pip_path, "install", "ansible_playtest"],  # Note the underscore here
-                    check=True
+                    [
+                        self.pip_path,
+                        "install",
+                        "ansible_playtest",
+                    ],  # Note the underscore here
+                    check=True,
                 )
             except subprocess.CalledProcessError:
-                logger.warning("Failed to install ansible_playtest from pip, creating minimal package structure")
-                
-                # Last resort: create a minimal package structure with the essential modules
-                try:
-                    # Create the directories and structure needed
-                    site_packages = subprocess.run(
-                        [self.python_path, "-c", "import site; print(site.getsitepackages()[0])"],
-                        capture_output=True, 
-                        text=True,
-                        check=True
-                    ).stdout.strip()
-                    
-                    ansible_playtest_dir = os.path.join(site_packages, "ansible_playtest")
-                    os.makedirs(ansible_playtest_dir, exist_ok=True)
-                    os.makedirs(os.path.join(ansible_playtest_dir, "mocks_servers"), exist_ok=True)
-                    os.makedirs(os.path.join(ansible_playtest_dir, "verifiers"), exist_ok=True)
-                    os.makedirs(os.path.join(ansible_playtest_dir, "utils"), exist_ok=True)
-                    
-                    # Create __init__.py files
-                    with open(os.path.join(ansible_playtest_dir, "__init__.py"), "w") as f:
-                        f.write('"""Ansible Playtest package."""\n')
-                    
-                    with open(os.path.join(ansible_playtest_dir, "mocks_servers", "__init__.py"), "w") as f:
-                        f.write('"""Mock servers for Ansible testing."""\n')
-                    
-                    with open(os.path.join(ansible_playtest_dir, "verifiers", "__init__.py"), "w") as f:
-                        f.write('"""Verifiers for Ansible testing."""\n')
-                    
-                    with open(os.path.join(ansible_playtest_dir, "utils", "__init__.py"), "w") as f:
-                        f.write('"""Utilities for Ansible testing."""\n')
-                    
-                    # Copy sample mock SMTP server implementation
-                    with open(os.path.join(ansible_playtest_dir, "mocks_servers", "mock_smtp_server.py"), "w") as f:
-                        f.write('''"""
-Mock SMTP Server implementation
-"""
+                logger.warning(
+                    "Failed to install ansible_playtest from pip, creating minimal package structure"
+                )
 
-class MockSMTPServer:
-    """A mock SMTP server for testing"""
-    
-    def __init__(self, host='localhost', port=0):
-        self.host = host
-        self.port = port
-        
-    def start(self):
-        """Start the SMTP server"""
-        pass
-        
-    def stop(self):
-        """Stop the SMTP server"""
-        pass
-''')
+    def get_environment_vars(
+        self, additional_env: Optional[Dict[str, str]] = None
+    ) -> Dict[str, str]:
+        """
+        Get environment variables for running commands in the virtual environment.
 
-                    # Create sample module_call verifier
-                    with open(os.path.join(ansible_playtest_dir, "verifiers", "module_call.py"), "w") as f:
-                        f.write('''"""
-Module call verifier implementation
-"""
+        This method returns a dictionary of environment variables that properly
+        activate the virtual environment. Useful for external tools or when
+        you need to pass environment to other subprocess calls.
 
-class ModuleCallVerifier:
-    """Verifies Ansible module calls"""
-    
-    def __init__(self):
-        pass
-        
-    def verify(self, module_name, **kwargs):
-        """Verify a module call"""
-        return True
-''')
+        Args:
+            additional_env: Optional additional environment variables to include.
 
-                    # Create simple logger
-                    with open(os.path.join(ansible_playtest_dir, "utils", "logger.py"), "w") as f:
-                        f.write('''"""
-Logger utilities
-"""
-import logging
+        Returns:
+            Dict[str, str]: Environment variables with virtual environment activated.
+        """
+        if not self._created:
+            raise RuntimeError(
+                "Virtual environment not created yet. Call create() first."
+            )
 
-def get_logger(name):
-    """Get a logger with the specified name"""
-    logger = logging.getLogger(name)
-    if not logger.handlers:
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-        logger.setLevel(logging.INFO)
-    return logger
-''')
+        # Setup environment variables to activate the virtual environment
+        cmd_env = os.environ.copy()
 
-                    logger.info(f"Created minimal ansible_playtest package in {ansible_playtest_dir}")
-                except Exception as e:
-                    logger.error(f"Failed to create minimal package structure: {str(e)}")
-                    raise
+        # Set VIRTUAL_ENV to point to the virtual environment
+        cmd_env["VIRTUAL_ENV"] = self.path
+
+        # Modify PATH to include the virtual environment's bin directory first
+        venv_bin_path = os.path.join(self.path, self.bin_dir)
+        current_path = cmd_env.get("PATH", "")
+        cmd_env["PATH"] = f"{venv_bin_path}{os.pathsep}{current_path}"
+
+        # Remove PYTHONHOME if it exists to avoid conflicts
+        cmd_env.pop("PYTHONHOME", None)
+
+        # Update with any additional environment variables provided
+        if additional_env:
+            cmd_env.update(additional_env)
+
+        return cmd_env
 
 
 # Legacy functions for backward compatibility
@@ -396,4 +440,6 @@ def install_packages(venv_dir: str, packages: list[str]) -> None:
     base_dir = os.path.dirname(venv_dir)
     name = os.path.basename(venv_dir)
     venv_obj = VirtualEnvironment(base_dir, name)
-    venv_obj.install_packages(packages)
+    # Only call install_packages if packages is not empty
+    if packages:
+        venv_obj.install_packages(packages)

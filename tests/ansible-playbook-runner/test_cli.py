@@ -1,8 +1,7 @@
 import os
-import subprocess
 import tempfile
-import pytest
 from unittest.mock import patch, MagicMock
+import pytest
 from click.testing import CliRunner
 from ansible_playbook_runner.cli import cli
 
@@ -43,19 +42,17 @@ class TestCLI:
         assert result.exit_code != 0
         assert 'Missing argument' in result.output
 
-    @patch('ansible_playbook_runner.environment.create_virtual_environment')
-    @patch('ansible_playbook_runner.environment.install_packages')
+    @patch('ansible_playbook_runner.ansible_runner_api.VirtualEnvironment')
     @patch('ansible_playbook_runner.utils.validate_playbook')
     @patch('ansible_playbook_runner.cli.create_temp_directory')
     @patch('subprocess.run')
     @patch('json.loads')
     def test_cli_runs_playbook(self, mock_json_loads, mock_run, mock_create_temp, 
-                              mock_validate, mock_install, mock_create_env, 
+                              mock_validate, mock_virtualenv, 
                               runner, example_playbook):
         """Test that the CLI runs a playbook with the correct arguments."""
         # Setup mocks
         mock_create_temp.return_value = "/tmp/test_dir"
-        mock_create_env.return_value = "/tmp/test_dir/venv"
         mock_validate.return_value = True
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -67,16 +64,21 @@ class TestCLI:
             "success": True, 
             "stats": {"localhost": {"ok": 1, "changed": 0}}
         }
+
+        # Mock VirtualEnvironment instance and its methods
+        mock_venv_instance = MagicMock()
+        mock_virtualenv.return_value = mock_venv_instance
+        mock_venv_instance.create.return_value = None
+        mock_venv_instance.install_packages.return_value = None
+        mock_venv_instance.install_requirements.return_value = None
+        mock_venv_instance.run_command.return_value = MagicMock(returncode=0, stdout='{"status": "successful", "rc": 0, "success": true, "stats": {"localhost": {"ok": 1, "changed": 0}}}', stderr='')
         
         # Run the CLI
         result = runner.invoke(cli, [example_playbook])
         
         # Checks
         assert mock_create_temp.called
-        assert mock_create_env.called
-        assert mock_install.called
+        assert mock_virtualenv.called
+        assert mock_venv_instance.create.called
         assert mock_validate.called_with(example_playbook)
-        assert mock_run.called
-        
-        # We don't need to assert specific string outputs due to color formatting, but we can check exit code
         assert result.exit_code == 0

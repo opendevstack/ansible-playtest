@@ -62,14 +62,14 @@ def run_playbook(
 
     Returns:
         dict: The result of the playbook execution.
-    
+
     Raises:
         ImportError: If ansible_runner module is not available.
     """
     # Check if ansible_runner is available
     if ansible_runner is None:
         raise ImportError("ansible_runner is required to run playbooks")
-    
+
     # Create a temp dir if using virtualenv and no path provided
     temp_dir = None
     venv = None
@@ -128,12 +128,11 @@ def run_playbook(
             else:
                 # Use the provided virtualenv path
                 venv = VirtualEnvironment(
-                    os.path.dirname(virtualenv_path), os.path.basename(virtualenv_path)
+                    base_dir=os.path.dirname(virtualenv_path),
+                    name=os.path.basename(virtualenv_path),
+                    created=True,
                 )
 
-            # Install required packages
-            base_packages = ["ansible", "ansible-runner", "pyyaml"]
-            venv.install_packages(base_packages)
 
             # Install additional requirements
             if requirements:
@@ -194,7 +193,7 @@ def run_playbook(
                 "status": result.status,
                 "rc": result.rc,
                 "success": result.status == "successful",
-                "stats": getattr(result, "stats", {})  # Include stats if available
+                "stats": getattr(result, "stats", {}),  # Include stats if available
             }
 
         if output.get("success", False):
