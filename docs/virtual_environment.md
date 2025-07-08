@@ -40,14 +40,14 @@ venv_path = create_virtual_environment("/path/to/temp_dir", install_playtest=Tru
 
 ## How It Works
 
-When `install_playtest=True` is specified:
+When `install_playtest=True` is specified, the system uses a robust fallback mechanism:
 
-1. The system attempts to find the `ansible_playtest` package source in several locations
-2. If found, it installs the package in development mode (`-e`)
-3. If not found, it tries to install the package from PyPI
-4. As a fallback, it creates a minimal package structure with the essential mock components
+1. **Development Mode Detection**: Attempts to find the `ansible_playtest` package source in several locations relative to the current file
+2. **Project Root Installation**: If found, installs the package in development mode (`pip install -e`)
+3. **PyPI Fallback**: If source not found, tries to install from PyPI using both `ansible-playtest` and `ansible_playtest` package names
+4. **Graceful Degradation**: If all installation methods fail, logs a warning but continues (allowing manual installation later)
 
-This ensures that the mock servers and verifiers are always available in the virtual environment, regardless of how it was created.
+This multi-tier approach ensures that the mock servers and verifiers are available regardless of the deployment scenario - whether running from source, installed package, or development environment.
 
 ## Advanced Usage
 
@@ -60,10 +60,71 @@ venv.install_ansible_playtest()  # Install specifically the ansible_playtest pac
 
 # Install other packages as needed
 venv.install_packages(["pytest", "ansible"])
+
+# Run commands in the virtual environment
+result = venv.run_command(["-m", "pytest", "tests/"])
+
+# Run shell commands with proper environment
+result = venv.run_shell_command(["ansible-playbook", "playbook.yml"])
+
+# Get environment variables for external tools
+env_vars = venv.get_environment_vars({"CUSTOM_VAR": "value"})
 ```
+
+## Available Methods
+
+The `VirtualEnvironment` class provides the following key methods:
+
+### Core Methods
+
+- **`create(install_playtest=True)`**: Creates the virtual environment and optionally installs ansible_playtest
+- **`cleanup()`**: Removes the virtual environment directory and all contents
+- **`install_packages(packages)`**: Installs a list of packages using pip
+- **`install_requirements(requirements_file)`**: Installs packages from a requirements.txt file
+- **`install_ansible_playtest(src_dir=None)`**: Specifically installs the ansible_playtest package
+
+### Command Execution
+
+- **`run_command(command, env=None, capture_output=False, text=True, check=False)`**: Runs Python commands in the virtual environment
+- **`run_shell_command(command, env=None, capture_output=False, text=True, check=False)`**: Runs shell commands with virtual environment activated
+- **`get_environment_vars(additional_env=None)`**: Returns environment variables for external tool integration
+
+### Properties
+
+- **`path`**: Full path to the virtual environment directory
+- **`python_path`**: Path to the virtual environment's Python executable
+- **`pip_path`**: Path to the virtual environment's pip executable
 
 ## Best Practices
 
-1. Always create a fresh virtual environment for each test run to ensure isolation
-2. Use the `cleanup()` method to remove the virtual environment when tests are complete
-3. If you need additional packages, install them after installing `ansible_playtest`
+1. **Always create a fresh virtual environment for each test run** to ensure isolation
+2. **Use the `cleanup()` method** to remove the virtual environment when tests are complete
+3. **Install additional packages after creating the environment**: Install `ansible_playtest` first, then other dependencies
+4. **Use `run_command()` for Python scripts** and `run_shell_command()` for direct shell commands
+5. **Leverage `get_environment_vars()`** when integrating with external tools that need the virtual environment context
+6. **Handle installation failures gracefully**: The `install_ansible_playtest()` method will attempt multiple installation strategies
+
+## Integration with Test Scenarios
+
+The virtual environment support integrates seamlessly with the test scenario framework. When running complex scenarios with multiple mock configurations, the virtual environment ensures all dependencies are properly isolated:
+
+```python
+# Example: Running a complex test scenario
+venv = VirtualEnvironment("/tmp/test_env")
+venv.create(install_playtest=True)
+
+# Install additional test dependencies
+venv.install_packages(["ansible", "requests"])
+
+# Run the test scenario
+result = venv.run_command([
+    "-m", "pytest", 
+    "tests/test_scenarios.py::test_servicenow_integration",
+    "-v"
+])
+
+# Clean up when done
+venv.cleanup()
+```
+
+This approach ensures that complex scenarios with multiple service mocks (like ServiceNow, Jira, and email services) run in complete isolation without affecting the host system.

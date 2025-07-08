@@ -1,56 +1,96 @@
 ```mermaid
 classDiagram
-    class AnsiblePlaybookTestRunner {
-        +playbook_path
-        +scenario_path
-        +inventory_path
-        +extra_vars
-        +setup()
-        +run()
-        +cleanup()
-    }
     class PlaybookRunner {
-        +run()
-        +run_playbook_with_scenario()
+        +scenario
+        +use_virtualenv
+        +requirements
+        +mock_collections_dir
+        +module_mocker
+        +temp_dir
+        +temp_collections_dir
+        +module_mock_manager
+        +virtualenv
+        +success
+        +execution_details
+        +__init__(scenario, use_virtualenv, requirements, mock_collections_dir, module_mocker)
+        +run_playbook_with_scenario(playbook_path, scenario_name, inventory_path, extra_vars, keep_mocks)
+        +setup_virtualenv()
+        +cleanup(verbose)
+        +copy_real_collections_to_temp(temp_dir)
+        +overlay_mock_modules(temp_collections_dir)
+        +playbook_statistics()
     }
     class AnsibleTestScenario {
         +scenario_path
         +scenario_data
-        +verify()
-        +get_mock_response()
-        +run_verifiers()
+        +temp_files
+        +verification_strategies
+        +__init__(scenario_path)
+        +get_name()
+        +get_description()
+        +get_mock_response(module_name)
+        +run_verifiers(playbook_statistics)
+        +expects_failure()
     }
     class ModuleMockConfigurationManager {
-        +create_mock_configs()
-        +set_env_vars()
+        +temp_dir
+        +module_temp_files
+        +module_configs
+        +__init__(temp_dir)
+        +create_mock_configs(scenario, module_names)
+        +set_env_vars(env)
         +cleanup()
     }
+    class VerificationStrategy {
+        <<abstract>>
+        +verify(statistics)
+        +get_status()
+        +get_description()
+    }
+    class VerificationStrategyFactory {
+        +create_strategies(scenario_data)
+    }
+    class PytestPlugin {
+        +playbook_runner(request)
+        +pytest_configure(config)
+        +pytest_collection_modifyitems(config, items)
+    }
 
-    AnsiblePlaybookTestRunner "1" --> "1" PlaybookRunner : creates/uses
-    AnsiblePlaybookTestRunner "1" --> "1" AnsibleTestScenario : loads/uses
+    PytestPlugin "1" --> "1" PlaybookRunner : creates
     PlaybookRunner "1" --> "1" ModuleMockConfigurationManager : creates/uses
-    PlaybookRunner "1" --> "1" AnsibleTestScenario : uses for scenario data
-    AnsibleTestScenario "1" --> "many" VerificationStrategy : creates/uses
+    PlaybookRunner "1" --> "1" AnsibleTestScenario : loads via ScenarioFactory
+    AnsibleTestScenario "1" --> "many" VerificationStrategy : creates via factory
+    VerificationStrategyFactory --> VerificationStrategy : creates
 ```
 ```mermaid
 sequenceDiagram
     participant Test as pytest/test
-    participant Runner as AnsiblePlaybookTestRunner
+    participant Plugin as PytestPlugin
+    participant Runner as PlaybookRunner
     participant Scenario as AnsibleTestScenario
-    participant PBRunner as PlaybookRunner
+    participant Factory as ScenarioFactory
     participant MockMgr as ModuleMockConfigurationManager
+    participant Verifiers as VerificationStrategy
 
-    Test->>Runner: __init__(playbook_path, scenario_path, ...)
-    Test->>Runner: setup()
-    Runner->>Scenario: AnsibleTestScenario.from_yaml_file(scenario_path)
-    Runner->>PBRunner: PlaybookRunner(playbook_path, inventory_path, ...)
-    Test->>Runner: run()
-    Runner->>PBRunner: run()
-    PBRunner->>MockMgr: create_mock_configs()
-    PBRunner->>Scenario: use scenario data for mocks/verifications
-    PBRunner->>PBRunner: run_playbook_with_scenario()
-    PBRunner->>Scenario: run_verifiers()
-    Runner->>Test: TestResult
-    Test->>Runner: cleanup()
-    Runner->>PBRunner: cleanup()
+    Test->>Plugin: test execution starts
+    Plugin->>Runner: PlaybookRunner(scenario, use_virtualenv, requirements, mock_collections_dir, module_mocker)
+    Plugin->>Runner: setup_virtualenv() [if use_virtualenv]
+    Plugin->>Runner: run_playbook_with_scenario(playbook_path, scenario_name, inventory_path, extra_vars, keep_mocks)
+    Runner->>Factory: ScenarioFactory.load_scenario(scenario_name)
+    Factory->>Scenario: AnsibleTestScenario(scenario_path)
+    Scenario-->>Runner: scenario instance
+    Runner->>Runner: copy_real_collections_to_temp(temp_dir)
+    Runner->>Runner: overlay_mock_modules(temp_collections_dir)
+    Runner->>MockMgr: ModuleMockConfigurationManager(temp_dir)
+    Runner->>MockMgr: create_mock_configs(scenario, module_names)
+    Runner->>MockMgr: set_env_vars(env)
+    Runner->>Runner: ansible_runner.run() or run_playbook() [via virtualenv]
+    Runner->>Scenario: run_verifiers(playbook_statistics)
+    Scenario->>Verifiers: verify(statistics) [for each strategy]
+    Verifiers-->>Scenario: verification results
+    Scenario-->>Runner: verification_results
+    Runner-->>Plugin: (success, execution_details)
+    Plugin->>Test: yield runner with results
+    Test->>Plugin: test completion
+    Plugin->>Runner: cleanup() [if not keep_artifacts]
 ```

@@ -2,6 +2,14 @@
 
 This document provides practical examples and best practices for using the verification strategies in the test framework.
 
+## YAML Structure
+
+Test scenarios support two mock configuration formats:
+- `service_mocks:` - For general module mocking
+- `mocks:` - Alternative format with module/responses structure
+
+Both formats are supported and can be used interchangeably.
+
 ## Example Scenarios
 
 ### Basic Success Path Testing
@@ -54,7 +62,7 @@ verify:
         subject: "Project PROJ-123 Expiration Notification"
     
     edpc.general.bitbucket_file_upload:
-      - content_contains: "PROJ-123"
+      - content: "Updated project list: PROJ-123"
   
   # Verify call sequence
   call_sequence:
@@ -67,42 +75,32 @@ verify:
 
 ### Error Handling Testing
 
-This example demonstrates testing error handling and recovery:
+This example demonstrates testing error handling:
 
 ```yaml
-name: "Project Notification Test - ServiceNow Error Recovery"
-description: "Tests recovery when ServiceNow API initially fails"
+name: "Project Notification Test - ServiceNow Error"
+description: "Tests error handling when ServiceNow API fails"
 playbook: "project_ttl_notification.yaml"
 
 # Mock service responses
 service_mocks:
   edpc.general.servicenow_login:
-    _conditional_responses:
-      - condition:
-          _call_count: 1
-        response:
-          success: false
-          error_message: "Service temporarily unavailable"
-      - condition:
-          _call_count: 2
-        response:
-          success: true
-          access_token: "mock-token-value"
+    success: false
+    error_message: "Service temporarily unavailable"
     
   # Other mocks...
     
 # Verification configuration
 verify:
-  # Verify module call counts - login called twice due to retry
+  # Verify module call counts
   expected_calls:
-    edpc.general.servicenow_login: 2
-    edpc.general.servicenow_retrieve_projects: 1
+    edpc.general.servicenow_login: 1
   
-  # Verify error occurred but was handled
+  # Verify error occurred
   expected_errors:
     - message: "Service temporarily unavailable"
       task: "Get the access token for servicenow"
-      expect_process_failure: false
+      expect_process_failure: true
 ```
 
 ### Complex Parameter Validation
@@ -129,10 +127,7 @@ verify:
     community.general.mail:
       - to: "{{ lookup('env', 'ADMIN_EMAIL') }}"
         subject: "Project Deletion Report"
-        body_contains:
-          - "Successfully deleted: 1"
-          - "PROJ-123"
-          - "Failures: 0"
+        body: "Successfully deleted: 1 projects. PROJ-123 completed. Failures: 0"
 ```
 
 ## Best Practices by Verification Type
@@ -156,17 +151,18 @@ verify:
 
 1. **Focus on critical parameters**: Verify only the most important parameters
 2. **Check computed values**: Validate parameters that result from computations
-3. **Use partial matching**: For large text fields, check for key content rather than exact matches
+3. **Use exact matching**: Parameter validation uses exact string comparison
+
+**Note**: Advanced parameter validation features like `subject_contains` or `body_contains` are not currently implemented. Use exact parameter values for validation.
 
 Example:
 ```yaml
 verify:
   parameter_validation:
     community.general.mail:
-      - subject_contains: "Expiration"
-        body_contains: 
-          - "will be deleted on"
-          - "${DATE:+30}"  # Using dynamic date
+      - subject: "Project Expiration Notification"
+        to: "admin@example.com"
+        body: "Project will be deleted on 2024-01-01"
 ```
 
 ### Call Sequence Verification
@@ -249,29 +245,21 @@ verify:
 
 ### Testing Error Recovery
 
-For testing recovery from temporary failures:
+For testing error scenarios (note: conditional responses based on call count are not currently implemented):
 
 ```yaml
+# Mock a service that always fails
 service_mocks:
   api.call:
-    _conditional_responses:
-      - condition:
-          _call_count: 1
-        response:
-          success: false
-          error: "Temporary failure"
-      - condition:
-          _call_count: 2
-        response:
-          success: true
-          data: "Success on retry"
+    success: false
+    error: "Service unavailable"
 
 verify:
   expected_calls:
-    api.call: 2  # Called twice due to retry
+    api.call: 1
   expected_errors:
-    - message: "Temporary failure"
-      expect_process_failure: false  # Process should recover
+    - message: "Service unavailable"
+      expect_process_failure: true  # Process should fail
 ```
 
 ## Integration with Mock SMTP Server
@@ -301,4 +289,3 @@ verify:
 - [Parameter Verifier](parameter_verifier.md)
 - [Sequence Verifier](sequence_verifier.md)
 - [Error Verifier](error_verifier.md)
-- [Test Framework Documentation](test_framework.md)
