@@ -4,11 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ansible-playtest"
-version = "0.1.0"
+version = "0.1.1"
 description = "Scenario-based testing framework for Ansible playbooks"
-authors = [
-    {name = "EDPC Team", email = "edpc.team@example.com"}
-]
 readme = "README.md"
 requires-python = ">=3.10"
 classifiers = [

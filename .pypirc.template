@@ -1,0 +1,24 @@
+# Configuration template for .pypirc
+# Copy this file to ~/.pypirc and configure your repository details
+
+[distutils]
+index-servers = 
+    pypi
+    myserver
+
+[pypi]
+repository: https://upload.pypi.org/legacy/
+username: __token__
+
+[myserver]
+repository: https://your-server.com/repository/pypi-internal/
+username: your-username
+password: your-password
+
+# For token-based authentication (if supported by your myserver):
+# username: __token__
+# password: your-myserver-token
+
+# Alternative configuration using environment variables:
+# The deploy_myserver.sh script can create this file automatically
+# using myserver_URL, myserver_USERNAME, and myserver_PASSWORD environment variables

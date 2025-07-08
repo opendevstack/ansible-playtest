@@ -119,7 +119,7 @@ venv.install_packages(["ansible", "requests"])
 # Run the test scenario
 result = venv.run_command([
     "-m", "pytest", 
-    "tests/test_scenarios.py::test_servicenow_integration",
+    "tests/test_scenarios.py::test_myservice_integration",
     "-v"
 ])
 
@@ -127,4 +127,4 @@ result = venv.run_command([
 venv.cleanup()
 ```
 
-This approach ensures that complex scenarios with multiple service mocks (like ServiceNow, Jira, and email services) run in complete isolation without affecting the host system.
+This approach ensures that complex scenarios with multiple service mocks run in complete isolation without affecting the host system.

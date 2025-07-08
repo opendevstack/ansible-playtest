@@ -40,10 +40,16 @@ cd /home/viewnext/src/ANSIBLE_TOOLS/ansible-scenario-testing
 pip install -e .
 ```
 
+or
+
+```bash
+pip install ansible-playtest
+```
+
 Then run the demo:
 
 ```bash
-cd /home/viewnext/src/ANSIBLE_TOOLS/ansible-scenario-testing/examples/demo
+cd /examples/demo
 ./run_demo.py
 ```
 

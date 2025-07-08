@@ -159,6 +159,10 @@ class VirtualEnvironment:
 
         # Set VIRTUAL_ENV to point to the virtual environment
         cmd_env["VIRTUAL_ENV"] = self.path
+        
+        # Set PYTHONPATH to include the virtual environment's site-packages
+        site_packages_path = os.path.join(self.path, "lib", f"python{sys.version_info.major}.{sys.version_info.minor}", "site-packages")
+        cmd_env["PYTHONPATH"] = site_packages_path
 
         # Modify PATH to include the virtual environment's bin directory first
         venv_bin_path = os.path.join(self.path, self.bin_dir)
@@ -218,6 +222,10 @@ class VirtualEnvironment:
 
         # Set VIRTUAL_ENV to point to the virtual environment
         cmd_env["VIRTUAL_ENV"] = self.path
+
+        # Set PYTHONPATH to include the virtual environment's site-packages
+        site_packages_path = os.path.join(self.path, "lib", f"python{sys.version_info.major}.{sys.version_info.minor}", "site-packages")
+        cmd_env["PYTHONPATH"] = site_packages_path
 
         # Modify PATH to include the virtual environment's bin directory first
         venv_bin_path = os.path.join(self.path, self.bin_dir)
@@ -351,7 +359,7 @@ class VirtualEnvironment:
         try:
             # Try to install from PyPI
             subprocess.run(
-                [self.pip_path, "install", "ansible-playtest"],  # Note the dash here
+                [self.pip_path, "install", "ansible_playtest"],  # Note the dash here
                 check=True,
             )
         except subprocess.CalledProcessError:
@@ -397,6 +405,10 @@ class VirtualEnvironment:
         # Set VIRTUAL_ENV to point to the virtual environment
         cmd_env["VIRTUAL_ENV"] = self.path
 
+        # Set PYTHONPATH to include the virtual environment's site-packages
+        site_packages_path = os.path.join(self.path, "lib", f"python{sys.version_info.major}.{sys.version_info.minor}", "site-packages")
+        cmd_env["PYTHONPATH"] = site_packages_path
+        
         # Modify PATH to include the virtual environment's bin directory first
         venv_bin_path = os.path.join(self.path, self.bin_dir)
         current_path = cmd_env.get("PATH", "")

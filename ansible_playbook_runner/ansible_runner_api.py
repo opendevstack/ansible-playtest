@@ -22,6 +22,100 @@ from ansible_playtest.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+def _default_output() -> Dict[str, Any]:
+    """Return the default output dictionary for playbook execution."""
+    return {
+        "status": "successful",
+        "rc": 0,
+        "success": True,
+        "stats": {},
+    }
+
+
+def _prepare_env(
+    env_vars: Optional[Dict[str, str]],
+    collections_path: Optional[str],
+    callback_plugins: Optional[List[str]],
+) -> Dict[str, str]:
+    """Prepare the environment variables for playbook execution."""
+    cmd_env = os.environ.copy()
+    if env_vars:
+        cmd_env.update(env_vars)
+    if collections_path:
+        cmd_env["ANSIBLE_COLLECTIONS_PATH"] = collections_path
+    if callback_plugins:
+        cmd_env["ANSIBLE_CALLBACK_PLUGINS"] = os.pathsep.join(callback_plugins)
+    return cmd_env
+
+
+def _build_run_options(
+    playbook_path: str,
+    inventory_path: Optional[str],
+    extra_vars: Optional[Dict[str, Any]],
+    private_data_dir: Optional[str],
+    tags: Optional[List[str]],
+    skip_tags: Optional[List[str]],
+    verbosity: int,
+) -> Dict[str, Any]:
+    """Build the run options dictionary for ansible_runner.run."""
+    run_options = {"playbook": playbook_path, "verbosity": verbosity}
+    if inventory_path:
+        run_options["inventory"] = inventory_path
+    if extra_vars:
+        run_options["extravars"] = extra_vars
+    if private_data_dir:
+        run_options["private_data_dir"] = private_data_dir
+    if tags:
+        run_options["tags"] = tags
+    if skip_tags:
+        run_options["skip_tags"] = skip_tags
+    return run_options
+
+
+def _setup_virtualenv(virtualenv_path: Optional[str]):
+    """Set up a virtual environment and return (temp_dir, venv)."""
+    if not virtualenv_path:
+        temp_dir = tempfile.mkdtemp(prefix="ansible_runner_")
+        venv = VirtualEnvironment(temp_dir)
+        venv.create(install_playtest=True)
+    else:
+        temp_dir = None
+        venv = VirtualEnvironment(
+            base_dir=os.path.dirname(virtualenv_path),
+            name=os.path.basename(virtualenv_path),
+            created=True,
+        )
+    return temp_dir, venv
+
+
+def _install_requirements(venv, requirements):
+    """Install requirements into the virtual environment if provided."""
+    if not venv or not requirements:
+        return
+    if isinstance(requirements, str) and os.path.isfile(requirements):
+        venv.install_requirements(requirements)
+    elif isinstance(requirements, list):
+        venv.install_packages(requirements)
+
+
+def _parse_virtualenv_result(cmd_result) -> Dict[str, Any]:
+    """Parse the result of running the playbook in a virtualenv."""
+    if cmd_result.returncode != 0:
+        logging.error(
+            "Playbook execution failed with return code: %s",
+            cmd_result.returncode,
+        )
+        logging.error("Error: %s", cmd_result.stderr)
+        return {
+            "status": "failed",
+            "rc": cmd_result.returncode,
+            "success": False,
+            "stats": {},
+            "error": cmd_result.stderr,
+        }
+    return _default_output()
+
+
 def run_playbook(
     playbook_path: str,
     inventory_path: Optional[str] = None,
@@ -70,79 +164,26 @@ def run_playbook(
     if ansible_runner is None:
         raise ImportError("ansible_runner is required to run playbooks")
 
-    # Create a temp dir if using virtualenv and no path provided
     temp_dir = None
     venv = None
-    output = {
-        "status": "successful",  # Fix typo in "successful"
-        "rc": 0,
-        "success": True,
-        "stats": {},  # Always include stats key, even if empty
-    }
-
+    output = _default_output()
     logger.info("Running playbook: %s", playbook_path)
 
     try:
-        # Set up the environment
-        cmd_env = os.environ.copy()
-        if env_vars:
-            cmd_env.update(env_vars)
+        cmd_env = _prepare_env(env_vars, collections_path, callback_plugins)
+        run_options = _build_run_options(
+            playbook_path,
+            inventory_path,
+            extra_vars,
+            private_data_dir,
+            tags,
+            skip_tags,
+            verbosity,
+        )
 
-        # Set up Ansible environment variables
-        if collections_path:
-            cmd_env["ANSIBLE_COLLECTIONS_PATH"] = collections_path
-
-        if callback_plugins:
-            cmd_env["ANSIBLE_CALLBACK_PLUGINS"] = os.pathsep.join(callback_plugins)
-
-        # Log what we're about to do
-        logger.info("Running playbook: %s", playbook_path)
-        if inventory_path:
-            logger.info("Using inventory: %s", inventory_path)
-
-        # Build run options - consistent for both virtualenv and non-virtualenv paths
-        run_options = {"playbook": playbook_path, "verbosity": verbosity}
-
-        if inventory_path:
-            run_options["inventory"] = inventory_path
-
-        if extra_vars:
-            run_options["extravars"] = extra_vars
-
-        if private_data_dir:
-            run_options["private_data_dir"] = private_data_dir
-
-        if tags:
-            run_options["tags"] = tags
-
-        if skip_tags:
-            run_options["skip_tags"] = skip_tags
-
-        # Handle virtualenv setup if needed
         if use_virtualenv:
-            if not virtualenv_path:
-                # Create a temporary directory
-                temp_dir = tempfile.mkdtemp(prefix="ansible_runner_")
-                venv = VirtualEnvironment(temp_dir)
-                venv.create()
-            else:
-                # Use the provided virtualenv path
-                venv = VirtualEnvironment(
-                    base_dir=os.path.dirname(virtualenv_path),
-                    name=os.path.basename(virtualenv_path),
-                    created=True,
-                )
-
-
-            # Install additional requirements
-            if requirements:
-                if isinstance(requirements, str) and os.path.isfile(requirements):
-                    venv.install_requirements(requirements)
-                elif isinstance(requirements, list):
-                    venv.install_packages(requirements)
-
-            # We can't directly use ansible_runner in the virtualenv from our code
-            # So we need to execute a script that does the import and runs the playbook
+            temp_dir, venv = _setup_virtualenv(virtualenv_path)
+            _install_requirements(venv, requirements)
             script = [
                 "-c",
                 _generate_runner_script(
@@ -155,45 +196,20 @@ def run_playbook(
                     verbosity,
                 ),
             ]
-
-            # Run the command in the virtualenv
             cmd_result = venv.run_command(script, cmd_env)
-
-            # Parse the result
-            if cmd_result.returncode != 0:
-                logging.error(
-                    "Playbook execution failed with return code: %s",
-                    cmd_result.returncode,
-                )
-                logging.error("Error: %s", cmd_result.stderr)
-                output = {
-                    "status": "failed",
-                    "rc": cmd_result.returncode,
-                    "success": False,
-                    "stats": {},
-                    "error": cmd_result.stderr,
-                }
-
+            output = _parse_virtualenv_result(cmd_result)
         else:
-            # When not using virtualenv, we can directly use the ansible_runner module
-            # Set environment variables if provided
             if env_vars:
                 run_options["envvars"] = env_vars
-
-            # Ensure private_data_dir exists if specified
             if private_data_dir and not os.path.exists(private_data_dir):
                 os.makedirs(private_data_dir, exist_ok=True)
-
-            # Using Any type for now - the type checker doesn't recognize ansible_runner.RunnerConfig type
             result: Any = ansible_runner.run(**run_options)
             logger.info("Playbook execution completed with result: %s", result)
-
-            # Prepare the result dictionary
             output = {
                 "status": result.status,
                 "rc": result.rc,
                 "success": result.status == "successful",
-                "stats": getattr(result, "stats", {}),  # Include stats if available
+                "stats": getattr(result, "stats", {}),
             }
 
         if output.get("success", False):
@@ -204,11 +220,8 @@ def run_playbook(
                 output.get("status", "unknown"),
             )
             logger.error("Return code: %s", output.get("rc", "unknown"))
-
         return output
-
     finally:
-        # Clean up temporary resources
         if temp_dir and venv and not keep_virtualenv:
             venv.cleanup()
             try:

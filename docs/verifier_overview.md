@@ -23,8 +23,8 @@ All verifiers are configured in the test scenario YAML files under the `verify` 
 verify:
   # Module call count verification
   expected_calls:
-    edpc.general.servicenow_login: 1
-    edpc.general.servicenow_retrieve_projects: 1
+    my.modules.myservice_login: 1
+    my.modules.myservice_retrieve_projects: 1
     community.general.mail: 2
     ansible.builtin.template: 1
   
@@ -39,8 +39,8 @@ verify:
   
   # Call sequence verification
   call_sequence:
-    - edpc.general.servicenow_login
-    - edpc.general.servicenow_retrieve_projects
+    - my.modules.myservice_login
+    - my.modules.myservice_retrieve_projects
     - ansible.builtin.template
     - community.general.mail
   

@@ -1,6 +1,6 @@
 
 # **Product Requirements Document (PRD)**  
-**Project Name:** Ansible Test Framework for Pytest  
+**Project Name:** PlayTest - Ansible Test Framework for Pytest  
 **Author:** Boehringer Ingelheim  
 **Date:** May 29, 2025  
 **Version:** 1.0  

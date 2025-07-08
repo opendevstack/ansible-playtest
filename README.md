@@ -15,7 +15,7 @@ A flexible and extensible framework for testing Ansible playbooks using scenario
 ## Installation
 
 ```bash
-pip install ansible-scenario-testing
+pip install ansible-playtest
 ```
 
 ## Quick Start
@@ -50,7 +50,30 @@ For more detailed information, see the documentation in the [docs/](docs/) direc
 - [Using Verifiers](docs/verifiers.md)
 - [Available Mocks](docs/mocks.md)
 - [Extending the Framework](docs/customization.md)
+- [Deployment to Nexus](docs/nexus_deployment.md)
 
-## License
+## Development
 
-MIT
+### Building and Packaging
+
+```bash
+# Install development dependencies
+pip install -r requirements_dev.txt
+
+# Build the package
+python -m build
+
+# Deploy to private Nexus repository
+./deploy_nexus.sh --upload
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=ansible_playtest
+```
+

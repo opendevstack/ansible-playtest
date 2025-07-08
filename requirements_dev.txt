@@ -3,3 +3,6 @@ pylint
 -e .
 pytest
 pytest-cov
+build
+twine
+wheel

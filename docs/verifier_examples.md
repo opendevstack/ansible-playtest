@@ -23,11 +23,11 @@ playbook: "project_ttl_notification.yaml"
 
 # Mock service responses
 service_mocks:
-  edpc.general.servicenow_login:
+  my.modules.myservice_login:
     success: true
     access_token: "mock-token-value"
     
-  edpc.general.servicenow_retrieve_projects:
+  my.modules.myservice_retrieve_projects:
     success: true
     projects:
       - id: "PROJ-123"
@@ -37,22 +37,22 @@ service_mocks:
         created_date: "${DATE:-60}"
         status: "active"
         
-  edpc.general.bitbucket_file_retriever:
+  my.modules.myrepository_file_retriever:
     success: true
     exists: true
     content: '[]'
     
-  edpc.general.bitbucket_file_upload:
+  my.modules.myrepository_file_upload:
     success: true
     
 # Verification configuration
 verify:
   # Verify module call counts
   expected_calls:
-    edpc.general.servicenow_login: 1
-    edpc.general.servicenow_retrieve_projects: 1
-    edpc.general.bitbucket_file_retriever: 1
-    edpc.general.bitbucket_file_upload: 1
+    my.modules.myservice_login: 1
+    my.modules.myservice_retrieve_projects: 1
+    my.modules.myrepository_file_retriever: 1
+    my.modules.myrepository_file_upload: 1
     community.general.mail: 2
   
   # Verify parameters
@@ -61,15 +61,15 @@ verify:
       - to: "project.owner@example.com,project.requestor@example.com"
         subject: "Project PROJ-123 Expiration Notification"
     
-    edpc.general.bitbucket_file_upload:
+    my.modules.myrepository_file_upload:
       - content: "Updated project list: PROJ-123"
   
   # Verify call sequence
   call_sequence:
-    - edpc.general.servicenow_login
-    - edpc.general.servicenow_retrieve_projects
-    - edpc.general.bitbucket_file_retriever
-    - edpc.general.bitbucket_file_upload
+    - my.modules.myservice_login
+    - my.modules.myservice_retrieve_projects
+    - my.modules.myrepository_file_retriever
+    - my.modules.myrepository_file_upload
     - community.general.mail
 ```
 
@@ -78,13 +78,13 @@ verify:
 This example demonstrates testing error handling:
 
 ```yaml
-name: "Project Notification Test - ServiceNow Error"
-description: "Tests error handling when ServiceNow API fails"
+name: "Project Notification Test - MyService Error"
+description: "Tests error handling when MyService API fails"
 playbook: "project_ttl_notification.yaml"
 
 # Mock service responses
 service_mocks:
-  edpc.general.servicenow_login:
+  my.modules.myservice_login:
     success: false
     error_message: "Service temporarily unavailable"
     
@@ -94,12 +94,12 @@ service_mocks:
 verify:
   # Verify module call counts
   expected_calls:
-    edpc.general.servicenow_login: 1
+    my.modules.myservice_login: 1
   
   # Verify error occurred
   expected_errors:
     - message: "Service temporarily unavailable"
-      task: "Get the access token for servicenow"
+      task: "Get the access token for myservice"
       expect_process_failure: true
 ```
 
@@ -117,7 +117,7 @@ service_mocks:
 
 verify:
   parameter_validation:
-    edpc.general.servicenow_update_project:
+    my.modules.myservice_update_project:
       - project_id: "PROJ-123"
         fields:
           status: "deleted"
@@ -142,8 +142,8 @@ Example:
 ```yaml
 verify:
   expected_calls:
-    edpc.general.servicenow_login: 1
-    edpc.general.servicenow_create_incident: 0  # Should not create an incident in this scenario
+    my.modules.myservice_login: 1
+    my.modules.myservice_create_incident: 0  # Should not create an incident in this scenario
     community.general.mail: 1
 ```
 
@@ -175,9 +175,9 @@ Example:
 ```yaml
 verify:
   call_sequence:
-    - edpc.general.servicenow_login  # Must happen first
-    - edpc.general.servicenow_retrieve_projects  # Depends on login
-    - edpc.general.bitbucket_file_upload  # Must happen after project retrieval
+    - my.modules.myservice_login  # Must happen first
+    - my.modules.myservice_retrieve_projects  # Depends on login
+    - my.modules.myrepository_file_upload  # Must happen after project retrieval
 ```
 
 ### Error Verification
@@ -191,7 +191,7 @@ Example:
 verify:
   expected_errors:
     - message: "Access denied: insufficient permissions"
-      task: "Update ServiceNow record"
+      task: "Update MyService record"
       expect_process_failure: true  # This should be a fatal error
 ```
 

@@ -1,0 +1,5 @@
+---
+name: PlayTest
+description: "Testing framework for Ansible playbooks"
+version: v0.1.0
+type: ods-library

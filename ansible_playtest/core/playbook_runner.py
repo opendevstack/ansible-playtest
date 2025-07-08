@@ -15,7 +15,9 @@ import shutil
 from ansible_playtest.core.scenario_factory import ScenarioFactory
 from ansible_playbook_runner.environment import VirtualEnvironment
 from ansible_playbook_runner.ansible_runner_api import run_playbook
-from ansible_playtest.ansible_mocker.module_mock_configuration_manager import ModuleMockConfigurationManager
+from ansible_playtest.ansible_mocker.module_mock_configuration_manager import (
+    ModuleMockConfigurationManager,
+)
 
 # Add the parent directory to path
 parent_dir = os.path.dirname(os.path.abspath(__file__))
@@ -24,11 +26,17 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 
-
 class PlaybookRunner:
     """Class for running Ansible playbooks with scenario-based testing"""
 
-    def __init__(self, scenario=None, use_virtualenv=False, requirements=None, mock_collections_dir=None, module_mocker=None):
+    def __init__(
+        self,
+        scenario=None,
+        use_virtualenv=False,
+        requirements=None,
+        mock_collections_dir=None,
+        module_mocker=None,
+    ):
         """
         Initialize the PlaybookRunner class
 
@@ -75,19 +83,19 @@ class PlaybookRunner:
 
         # Try multiple paths for collections in order of preference:
         # 1. Check for ANSIBLE_PLAYTEST_COLLECTIONS_DIR environment variable (set via --ansible-playtest-collections-dir)
-        # 2. Check for ANSIBLE_COLLECTIONS_PATH environment variable 
+        # 2. Check for ANSIBLE_COLLECTIONS_PATH environment variable
         # 3. Check for collections in the current working directory (where pytest is run from)
         # 4. Check for collections in the root directory of the project using the plugin
         # 5. Check for collections in the runner.project_dir
 
         # List of directories to check, in order of preference
         collection_dirs_to_check = []
-        
+
         # 1. First priority: Explicitly set collections directory via pytest option
         explicit_collections_dir = os.environ.get("ANSIBLE_PLAYTEST_COLLECTIONS_DIR")
         if explicit_collections_dir:
             collection_dirs_to_check.append(explicit_collections_dir)
-        
+
         # 2. Second priority: Standard Ansible collections path from environment
         ansible_collections_path = os.environ.get("ANSIBLE_COLLECTIONS_PATH")
         if ansible_collections_path:
@@ -95,36 +103,38 @@ class PlaybookRunner:
             for path in ansible_collections_path.split(os.pathsep):
                 if path:  # Skip empty path elements
                     collection_dirs_to_check.append(path)
-        
+
         # Current working directory (where pytest is run from)
         current_dir = os.getcwd()
-        
+
         # 3. Look in current working directory
         cwd_collections_dir = os.path.join(current_dir, "ansible_collections")
         collection_dirs_to_check.append(cwd_collections_dir)
-        
+
         # 4. Look in parent directory of current working directory
         parent_dir = os.path.dirname(current_dir)
         parent_collections_dir = os.path.join(parent_dir, "ansible_collections")
         collection_dirs_to_check.append(parent_collections_dir)
-        
+
         # 5. Look in the project directory where this script is located
         project_collections_dir = os.path.join(self.project_dir, "ansible_collections")
         collection_dirs_to_check.append(project_collections_dir)
-                    
+
         # Try each collections directory in order
         collections_found = False
         collections_source = None
-        
+
         for collections_dir in collection_dirs_to_check:
             if os.path.exists(collections_dir):
                 print(f"Found collections directory at: {collections_dir}")
                 collections_source = collections_dir
                 collections_found = True
                 break
-        
+
         if collections_found and collections_source is not None:
-            print(f"Copying collections from {collections_source} to {temp_collections_dir}")
+            print(
+                f"Copying collections from {collections_source} to {temp_collections_dir}"
+            )
             # Use shutil.copytree for each subdirectory to preserve the structure
             for item in os.listdir(collections_source):
                 item_path = os.path.join(collections_source, item)
@@ -157,15 +167,21 @@ class PlaybookRunner:
                 mock_collections_dir = self.mock_collections_dir
             else:
                 # Assume the path is to a directory containing ansible_collections
-                mock_collections_dir = os.path.join(self.mock_collections_dir, "ansible_collections")
+                mock_collections_dir = os.path.join(
+                    self.mock_collections_dir, "ansible_collections"
+                )
         else:
             # Check environment variable as a fallback
-            env_mock_collections = os.environ.get("ANSIBLE_PLAYTEST_MOCK_COLLECTIONS_DIR")
+            env_mock_collections = os.environ.get(
+                "ANSIBLE_PLAYTEST_MOCK_COLLECTIONS_DIR"
+            )
             if env_mock_collections:
                 if os.path.basename(env_mock_collections) == "ansible_collections":
                     mock_collections_dir = env_mock_collections
                 else:
-                    mock_collections_dir = os.path.join(env_mock_collections, "ansible_collections")
+                    mock_collections_dir = os.path.join(
+                        env_mock_collections, "ansible_collections"
+                    )
             else:
                 # Fall back to default location in the project
                 mock_collections_dir = os.path.join(
@@ -203,6 +219,7 @@ class PlaybookRunner:
         inventory_path=None,
         extra_vars=None,
         keep_mocks=False,
+        verbosity = 1  # Similar to '-v' flag in command line        
     ):
         """
         Run an Ansible playbook with a specific test scenario
@@ -213,6 +230,7 @@ class PlaybookRunner:
             inventory_path: Path to inventory file (optional)
             extra_vars: Dictionary of extra variables to pass (optional)
             keep_mocks: Whether to keep the mock files after execution (default: False)
+            verbosity: Level of verbosity in the execution of the playbook
 
         Returns:
             tuple: (success, result_dict)
@@ -294,15 +312,12 @@ class PlaybookRunner:
             # Set the ANSIBLE_COLLECTIONS_PATH to include our mock collections
             env["ANSIBLE_COLLECTIONS_PATH"] = self.temp_collections_dir
             print(f"Using temporary collections path: {self.temp_collections_dir}")
-
+            print("Setting PYTHONPATH for mock modules...")
             # Add Python path for imports
             if "PYTHONPATH" in env:
                 env["PYTHONPATH"] = f"{self.parent_dir}:{env['PYTHONPATH']}"
             else:
                 env["PYTHONPATH"] = self.parent_dir
-
-            # Prepare the Ansible Runner configuration
-            verbosity = 1  # Similar to '-v' flag in command line
 
             # Process and finalize extra_vars
             processed_extra_vars = extra_vars or {}
@@ -430,7 +445,6 @@ class PlaybookRunner:
         if not self.use_virtualenv:
             return True
 
-
         try:
             # Ensure temp_dir is created before setting up virtualenv
             if not self.temp_dir:
@@ -459,13 +473,15 @@ class PlaybookRunner:
                     self.virtualenv.install_packages(self.requirements)
 
             # Apply module mocks to the virtual environment after installation
-            if self.module_mocker and hasattr(self.module_mocker, 'setup_mocks'):
+            if self.module_mocker and hasattr(self.module_mocker, "setup_mocks"):
                 print("Applying module mocks to virtual environment...")
                 try:
                     self.module_mocker.setup_mocks(self.virtualenv.path)
                     print("Module mocks applied successfully to virtual environment.")
                 except Exception as e:
-                    print(f"Warning: Failed to apply module mocks to virtual environment: {str(e)}")
+                    print(
+                        f"Warning: Failed to apply module mocks to virtual environment: {str(e)}"
+                    )
 
             return True
 
@@ -642,6 +658,7 @@ def main():
             inventory_path=args.inventory,
             extra_vars=extra_vars,
             keep_mocks=args.keep_mocks,
+            verbosity=args.verbosity,
         )
 
         # Exit with appropriate return code
@@ -659,12 +676,14 @@ def main():
             runner.cleanup(verbose=True)
         sys.exit(1)
 
+
 # Constants for output formatting
 GREEN = "\033[92m"
 RED = "\033[91m"
 RESET = "\033[0m"
 PASS_SYMBOL = "\u2713"  # Checkmark
 FAIL_SYMBOL = "\u2717"  # X mark
+
 
 def colored_result(success):
     color = GREEN if success else RED

@@ -6,8 +6,6 @@ from __future__ import annotations
 import os
 import sys
 import pytest
-import os
-import sys
 import ansible_playtest.ansible_callback
 from ansible_playtest.core.playbook_runner import PlaybookRunner
 from ansible_playtest.core.scenario_factory import ScenarioFactory
@@ -109,6 +107,8 @@ def playbook_runner(request):
     keep_artifacts = False
     use_virtualenv = False
     requirements = None
+    verbosity = 1
+
 
     if hasattr(request, "param"):
         playbook_path = request.param.get("playbook_path")
@@ -134,6 +134,9 @@ def playbook_runner(request):
 
     # Get mock_collections_dir
     mock_collections_directory = _get_mock_collections_dir(request)
+    
+    # Get verbosity level
+    verbosity = _get_verbosity(request)
     
     # Check if module_mocker fixture is available
     module_mocker = None
@@ -162,6 +165,7 @@ def playbook_runner(request):
         inventory_path=inventory_path,
         extra_vars=extra_vars,
         keep_mocks=keep_artifacts,
+        verbosity=verbosity
     )
 
     # Yield the runner to the test function
@@ -285,6 +289,13 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         ),
         help="Additional packages to install in the virtual environment (comma-separated)",
     )
+    group.addoption(
+        "--ansible-playtest-verbosity",
+        action="store",
+        type=int,
+        default=int(os.environ.get("ANSIBLE_PLAYTEST_VERBOSITY", "1")),
+        help="Verbosity level for Ansible playbook execution (1-5, default: 1)",
+    )
 
 
 def pytest_configure(config):
@@ -324,6 +335,10 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers",
         "playbooks_dir(path): specify path to the playbooks directory",
+    )
+    config.addinivalue_line(
+        "markers",
+        "verbosity(level): specify verbosity level for Ansible playbook execution (0-4)",
     )
 
 
@@ -545,3 +560,18 @@ def _get_use_virtualenv(request):
         use_virtualenv = True
 
     return use_virtualenv
+
+
+def _get_verbosity(request):
+    """
+    Get the verbosity level from markers or CLI options.
+    """
+    # Check for verbosity marker first
+    verbosity_marker = request.node.get_closest_marker("verbosity")
+    if verbosity_marker and verbosity_marker.args:
+        return verbosity_marker.args[0]
+    
+    # Fall back to command line option
+    verbosity = request.config.getoption("--ansible-playtest-verbosity", 0)
+    
+    return verbosity

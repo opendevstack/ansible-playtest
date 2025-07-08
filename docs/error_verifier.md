@@ -113,16 +113,16 @@ verify:
 
 ## Practical Example
 
-Here's a complete scenario file using error verification to test ServiceNow login failure:
+Here's a complete scenario file using error verification to test MyService login failure:
 
 ```yaml
-name: "Project Notification Test - ServiceNow Login Failure"
-description: "Tests notification process error handling when ServiceNow login fails"
+name: "Project Notification Test - MyService Login Failure"
+description: "Tests notification process error handling when MyService login fails"
 playbook: "project_ttl_notification.yaml"
 
 # Mock service responses
 service_mocks:
-  edpc.general.servicenow_login:
+  my.modules.myservice_login:
     success: false
     error_message: "Invalid credentials or authorization failed"
     status_code: 401
@@ -132,13 +132,13 @@ service_mocks:
 # Expected function calls with parameters
 verify:
   expected_calls:
-    edpc.general.servicenow_login: 1
-    edpc.general.servicenow_retrieve_projects: 0
+    my.modules.myservice_login: 1
+    my.modules.myservice_retrieve_projects: 0
   
   # Error verification configuration
   expected_errors:
     - message: "Unknown error"
-      task: "Get the access token for servicenow."
+      task: "Get the access token for myservice."
       expect_process_failure: true
 ```
 

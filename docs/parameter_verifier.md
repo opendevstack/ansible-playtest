@@ -70,7 +70,7 @@ verify:
 ```yaml
 verify:
   parameter_validation:
-    edpc.general.servicenow_create_incident:
+    my.modules.myservice_create_incident:
       - incident_type: "alert"
         priority: "high"
         description: "Critical system failure"
@@ -102,7 +102,7 @@ playbook: "project_ttl_notification.yaml"
 
 # Mock service responses
 service_mocks:
-  edpc.general.servicenow_login:
+  my.modules.myservice_login:
     success: true
     access_token: "mock-token-value"
     

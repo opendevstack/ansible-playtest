@@ -60,9 +60,9 @@ verify:
 ```yaml
 verify:
   expected_calls:
-    edpc.general.servicenow_login: 1
-    edpc.general.servicenow_retrieve_projects: 1
-    edpc.general.bitbucket_file_retriever: 1
+    my.modules.myservice_login: 1
+    my.modules.myservice_retrieve_projects: 1
+    my.modules.myrepository_file_retriever: 1
     community.general.mail: 3
     ansible.builtin.template: 2
 ```
@@ -78,17 +78,17 @@ playbook: "project_ttl_notification.yaml"
 
 # Mock service responses
 service_mocks:
-  edpc.general.servicenow_login:
+  my.modules.myservice_login:
     success: true
     access_token: "mock-token-value"
     
-  edpc.general.servicenow_retrieve_projects:
+  my.modules.myservice_retrieve_projects:
     success: true
     projects:
       - id: "123"
         name: "Test Project"
         
-  edpc.general.bitbucket_file_retriever:
+  my.modules.myrepository_file_retriever:
     success: true
     exists: true
     content: "[]"
@@ -96,9 +96,9 @@ service_mocks:
 # Verification configuration
 verify:
   expected_calls:
-    edpc.general.servicenow_login: 1
-    edpc.general.servicenow_retrieve_projects: 1
-    edpc.general.bitbucket_file_retriever: 1
+    my.modules.myservice_login: 1
+    my.modules.myservice_retrieve_projects: 1
+    my.modules.myrepository_file_retriever: 1
     community.general.mail: 1
 ```
 

@@ -64,9 +64,9 @@ Sequence verification is ideal for:
 ```yaml
 verify:
   call_sequence:
-    - edpc.general.servicenow_login
-    - edpc.general.servicenow_retrieve_projects
-    - edpc.general.bitbucket_file_retriever
+    - my.modules.myservice_login
+    - my.modules.myservice_retrieve_projects
+    - my.modules.myrepository_file_retriever
 ```
 
 ### Critical Path Verification
@@ -76,8 +76,8 @@ You can focus on just the critical path modules:
 ```yaml
 verify:
   call_sequence:
-    - edpc.general.servicenow_login
-    - edpc.general.servicenow_retrieve_projects
+    - my.modules.myservice_login
+    - my.modules.myservice_retrieve_projects
     - community.general.mail
 ```
 
@@ -92,17 +92,17 @@ playbook: "project_ttl_notification.yaml"
 
 # Mock service responses
 service_mocks:
-  edpc.general.servicenow_login:
+  my.modules.myservice_login:
     success: true
     access_token: "mock-token-value"
     
-  edpc.general.servicenow_retrieve_projects:
+  my.modules.myservice_retrieve_projects:
     success: true
     projects:
       - id: "123"
         name: "Test Project"
         
-  edpc.general.bitbucket_file_retriever:
+  my.modules.myrepository_file_retriever:
     success: true
     exists: true
     content: "[]"
@@ -110,9 +110,9 @@ service_mocks:
 # Verification configuration
 verify:
   call_sequence:
-    - edpc.general.servicenow_login
-    - edpc.general.servicenow_retrieve_projects
-    - edpc.general.bitbucket_file_retriever
+    - my.modules.myservice_login
+    - my.modules.myservice_retrieve_projects
+    - my.modules.myrepository_file_retriever
     - ansible.builtin.template
     - community.general.mail
 ```
@@ -125,7 +125,7 @@ Sequence verification works well when combined with other verifiers:
 verify:
   # Verify exact call counts
   expected_calls:
-    edpc.general.servicenow_login: 1
+    my.modules.myservice_login: 1
     community.general.mail: 2
   
   # Verify parameters for specific calls
@@ -136,8 +136,8 @@ verify:
       
   # Verify call order
   call_sequence:
-    - edpc.general.servicenow_login
-    - edpc.general.servicenow_retrieve_projects
+    - my.modules.myservice_login
+    - my.modules.myservice_retrieve_projects
     - community.general.mail
 ```
 

@@ -43,7 +43,7 @@ class TestCLI:
         assert 'Missing argument' in result.output
 
     @patch('ansible_playbook_runner.ansible_runner_api.VirtualEnvironment')
-    @patch('ansible_playbook_runner.utils.validate_playbook')
+    @patch('ansible_playbook_runner.cli.validate_playbook')
     @patch('ansible_playbook_runner.cli.create_temp_directory')
     @patch('subprocess.run')
     @patch('json.loads')
@@ -80,5 +80,5 @@ class TestCLI:
         assert mock_create_temp.called
         assert mock_virtualenv.called
         assert mock_venv_instance.create.called
-        assert mock_validate.called_with(example_playbook)
+        mock_validate.assert_called_with(example_playbook)
         assert result.exit_code == 0
