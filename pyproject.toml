@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=77.0.3", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ansible-playtest"
+version = "0.1.1"
+description = "Scenario-based testing framework for Ansible playbooks"
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Testing",
+    "Programming Language :: Python :: 3",
+]
+keywords = ["ansible", "testing", "scenario", "mock"]
+
+dependencies = [
+    "ansible>=2.9.0",
+    "ansible-runner>=2.0.0",
+    "pyyaml>=5.1",
+    "aiosmtpd>=1.2.0",
+    "pytest>=6.0.0",
+]
+
+[project.scripts]
+ansible-playtest = "ansible_playtest.cli:main"
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.packages.find]
+include = ["ansible_playtest*", "ansible_playbook_runner"]
+
+[tool.setuptools.package-data]
+ansible_playtest = ["plugins/**/*"]
+
+[project.entry-points.pytest11]
+ansible_playtest = "ansible_playtest.pytest_plugin.plugin"
+ansible_playtest_module_mocker = "ansible_playtest.pytest_plugin.plugin_module_mocker"

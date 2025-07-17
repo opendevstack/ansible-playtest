@@ -1,0 +1,8 @@
+-r requirements.txt
+pylint
+-e .
+pytest
+pytest-cov
+build
+twine
+wheel

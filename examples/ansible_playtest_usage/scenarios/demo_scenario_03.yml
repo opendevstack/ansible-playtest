@@ -1,0 +1,19 @@
+# Demo Scenario 03
+---
+name: Demo Scenario 03
+description: Scenario to test error handling and sequence verification.
+playbook: demo_playbook_03.yml
+
+mocks:
+  - module: fail
+    responses:
+      - msg: "Intentional failure for scenario 03"
+
+verify:
+  expected_errors:
+    - task: "Intentional fail for scenario 03"
+      expect_process_failure: true
+      message: "Intentional failure for scenario 03"
+
+  call_sequence:
+    - fail

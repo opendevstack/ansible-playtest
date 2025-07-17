@@ -1,0 +1,1 @@
+recursive-include ansible_playtest/ansible_callback *.py

@@ -48,3 +48,8 @@ venv.bak/
 *~
 # Jupyter Notebook
 .ipynb_checkpoints
+.envrc
+nexus-ca.pem
+install_certificates.sh
+deploy_nexus.sh
+Jenkinsfile
