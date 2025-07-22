@@ -17,55 +17,20 @@ A flexible and extensible framework for testing Ansible playbooks using scenario
 ```bash
 pip install ansible-playtest
 ```
+- [Getting Started](docs/getting_started.md)
 
-## Quick Start
-
-```python
-from ansible_playtest.core.runner import run_playbook_test
-
-# Run a test with a scenario
-results = run_playbook_test(
-    playbook_path='path/to/playbook.yml',
-    scenario_path='path/to/scenario.yaml',
-    inventory_path='path/to/inventory.yml',
-    mock_modules=['service.module1', 'service.module2'],
-    use_smtp_mock=True
-)
-
-# Check if test passed
-if results['success']:
-    print("Test passed!")
-else:
-    print("Test failed!")
-    print(f"Details: {results['verification']}")
-```
 
 ## Documentation
 
-For more detailed information, see the documentation in the [docs/](docs/) directory:
+For detailed information, see the documentation in the [docs/](docs/) directory:
 
-- [Getting Started](docs/getting_started.md)
 - [Creating Scenarios](docs/scenarios.md)
 - [Configuration Options](docs/configuration.md)
-- [Using Verifiers](docs/verifiers.md)
+- [Using Verifiers](docs/verifiers_overview.md)
 - [Available Mocks](docs/mocks.md)
-- [Extending the Framework](docs/customization.md)
-- [Deployment to Nexus](docs/nexus_deployment.md)
 
 ## Development
 
-### Building and Packaging
-
-```bash
-# Install development dependencies
-pip install -r requirements_dev.txt
-
-# Build the package
-python -m build
-
-# Deploy to private Nexus repository
-./deploy_nexus.sh --upload
-```
 
 ### Running Tests
 
